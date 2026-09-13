@@ -1,14 +1,15 @@
 #include "udp.h"
-
+#include "common.h"
 
 void RunServer()
 {
+    int udpSocket, client_addr_len;
     struct sockaddr_in clientAddress;
     
     udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSocket == -1) {
         printf("Socket creation failed: %s...\n", strerror(errno));
-        return 1;
+        // return 1;
     }
     
     // Since the tester restarts your program quite often, setting REUSE_PORT
@@ -16,7 +17,7 @@ void RunServer()
     int reuse = 1;
     if (setsockopt(udpSocket, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
         printf("SO_REUSEPORT failed: %s \n", strerror(errno));
-        return 1;
+        // return 1;
     }
     
     struct sockaddr_in serv_addr = { .sin_family = AF_INET ,
@@ -26,7 +27,7 @@ void RunServer()
     
     if (bind(udpSocket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) != 0) {
         printf("Bind failed: %s \n", strerror(errno));
-        return 1;
+        // return 1;
     }
     
     int bytesRead;

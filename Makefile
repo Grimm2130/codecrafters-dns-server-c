@@ -2,7 +2,12 @@ rebase:
 	mkdir bin
 
 build:
-	cmake -B . -S .. && cmake --build ..
+	cd bin &&	\
+	cmake -B . -S .. && \
+	cmake --build .
 
 clean:
-	rm -rf bin
+	rm -rf bin/*
+
+run:
+	bin/dns-server
