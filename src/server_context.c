@@ -1,30 +1,7 @@
 #include "server_context.h"
 #include "common.h"
+#include "util.h"
 
-static uint32_t ip_n_to_str(const char *ip)
-{
-    int step = 3;
-    int temp = 0;
-    uint32_t num = 0;
-
-    int len = strlen(ip);
-
-    for (int i = 0; i < len; i++)
-    {
-        if (ip[i] == '.')
-        {
-            num |= (temp << (8 * step));
-            step--;
-            temp = 0;
-        }
-        else
-        {
-            temp = (temp * 10) + ip[i] - '0';
-        }
-    }
-
-    return num;
-}
 
 void server_context_create_s(server_context_t *context, const char *ip, uint16_t port)
 {
@@ -32,9 +9,10 @@ void server_context_create_s(server_context_t *context, const char *ip, uint16_t
 
     if (ip)
     {
-        ip_n = ip_n_to_str(ip);
+        ip_n = ip_str_to_n(ip);
     }
 
+    context->sock = -1;
     context->addr.sin_family = AF_INET;
     context->addr.sin_port = htons(port);
     context->addr.sin_addr.s_addr = htonl(ip_n);

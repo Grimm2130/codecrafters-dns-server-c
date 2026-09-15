@@ -11,3 +11,6 @@ clean:
 
 run:
 	bin/dns-server
+
+test:
+	bin/test-runner > test.log

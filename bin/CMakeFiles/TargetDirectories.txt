@@ -1,3 +1,0 @@
-/home/ubuntu/Projects/DNS/codecrafters-dns-server-c/bin/CMakeFiles/dns-server.dir
-/home/ubuntu/Projects/DNS/codecrafters-dns-server-c/bin/CMakeFiles/edit_cache.dir
-/home/ubuntu/Projects/DNS/codecrafters-dns-server-c/bin/CMakeFiles/rebuild_cache.dir

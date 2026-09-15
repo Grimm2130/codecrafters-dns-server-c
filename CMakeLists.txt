@@ -8,6 +8,12 @@ include_directories(
 
 file(GLOB_RECURSE SOURCE_FILES src/*.c src/*.h)
 
+file(GLOB TESTS_FILES 
+    src/cir_buffer.c
+    tests/*
+)
+
 set(CMAKE_C_STANDARD 23) # Enable the C23 standard
 
 add_executable(dns-server ${SOURCE_FILES})
+add_executable(test-runner ${TESTS_FILES})

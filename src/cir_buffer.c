@@ -48,10 +48,11 @@ int cir_buffer_read( cir_buffer_t* cbuf, char *buf, const uint32_t amnt )
 
     if( can_read )
     {
-        cbuf->size--;
-        cbuf->buffer[cbuf->front] = calloc( amnt, sizeof(char) );
-        strncpy( buf, cbuf->buffer[ cbuf->front], amnt );
+        memcpy( buf, cbuf->buffer[ cbuf->front], amnt );
+        free(cbuf->buffer[ cbuf->front]);
+        cbuf->buffer[ cbuf->front] = NULL;
         cbuf->front = (cbuf->front + 1) % CIR_BUFFER_ENTRY_CAPACITY;
+        cbuf->size--;
     }
 
     return amnt;
@@ -73,11 +74,22 @@ int cir_buffer_write( cir_buffer_t* cbuf, const char * buf, const uint32_t amnt 
 
     if( can_write )
     {
-        cbuf->size++;
         cbuf->buffer[cbuf->rear] = calloc( amnt, sizeof(char) );
-        strncpy( cbuf->buffer[ cbuf->rear], buf, amnt );
+        memcpy( cbuf->buffer[ cbuf->rear], buf, amnt );
         cbuf->rear = (cbuf->rear + 1) % CIR_BUFFER_ENTRY_CAPACITY;
+        cbuf->size++;
     }
 
     return amnt;
+}
+
+/// @brief Destroy the Circular buffer
+/// @param cbuf 
+void cir_buffer_destroy( cir_buffer_t* cbuf )
+{
+    for( int i = 0; i < CIR_BUFFER_ENTRY_CAPACITY; i++ )
+    {
+        if( cbuf->buffer[i] ) free(cbuf->buffer[i]);
+        cbuf->buffer[i] = NULL;
+    }
 }

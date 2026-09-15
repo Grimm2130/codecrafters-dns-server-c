@@ -14,8 +14,8 @@ void run_tests_cir_buffer();
 static void test_cir_buffer_create();
 static void test_cir_buffer_empty( bool expected );
 static void test_cir_buffer_full( bool expected );
-static void test_cir_buffer_read();
-static void test_cir_buffer_write();
+static void test_cir_buffer_read( int cnt );
+static void test_cir_buffer_write( int cnt);
 
 static void test_cir_buffer_create()
 {
@@ -42,38 +42,57 @@ static void test_cir_buffer_full( bool expected )
     assert( cir_buffer_is_full(&cbuf) == expected );
 }
 
-static void test_cir_buffer_read()
+static void test_cir_buffer_read( int cnt )
 {
-    int count = 0;
     student_t student;
-    while( cir_buffer_is_empty( &cbuf ) == false )
+    int count = 0;
+    while( count < cnt )
     {
-        count++;
         cir_buffer_read( &cbuf, (char*)&student, STUDENT_SIZE);
         printf("Read " STUDENT_STR(&student));
+        count++;
     }
 
     printf("Read %d entries\n", count );
 }
 
-static void test_cir_buffer_write()
+static void test_cir_buffer_write(int cnt)
 {
     int count = 0;
-
-    while( cir_buffer_is_full( &cbuf ) == false )
+    while( count < cnt )
     {
         cir_buffer_write( &cbuf, (char*)(&students[count]), STUDENT_SIZE);
         printf("Wrote " STUDENT_STR((&students[count])));
         count++;
     }
 
-    printf("Read %d entries\n", count );
+    printf("Write %d entries\n", count );
 }
 
 
 void run_tests_cir_buffer()
 {
+    test_cir_buffer_create();
+    test_cir_buffer_empty(true);
+    test_cir_buffer_full(false);
+
+    test_cir_buffer_write( CIR_BUFFER_ENTRY_CAPACITY / 2 );
+    test_cir_buffer_empty(false);
+    test_cir_buffer_full(false);
     
+    test_cir_buffer_write( (CIR_BUFFER_ENTRY_CAPACITY / 2) + 1 );
+    test_cir_buffer_empty(false);
+    test_cir_buffer_full(true);
+
+    test_cir_buffer_read( (CIR_BUFFER_ENTRY_CAPACITY / 2) + 1 );
+    test_cir_buffer_empty(false);
+    test_cir_buffer_full(false);
+    
+    test_cir_buffer_read( CIR_BUFFER_ENTRY_CAPACITY / 2 );
+    test_cir_buffer_empty(true);
+    test_cir_buffer_full(false);
+
+    cir_buffer_destroy(&cbuf);
 }
 
 #endif // __CIR_BUFFER_TESTER_H__

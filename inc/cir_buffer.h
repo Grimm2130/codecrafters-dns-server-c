@@ -26,5 +26,7 @@ bool cir_buffer_is_empty( cir_buffer_t* );
 bool cir_buffer_is_full( cir_buffer_t* );
 int cir_buffer_read( cir_buffer_t*, char *, const uint32_t amnt );
 int cir_buffer_write( cir_buffer_t*, const char *, const uint32_t amnt );
+void cir_buffer_destroy( cir_buffer_t* );
+
 
 #endif // __CIR_BUFER_H__
