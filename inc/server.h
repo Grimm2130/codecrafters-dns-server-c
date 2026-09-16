@@ -38,15 +38,13 @@ typedef struct server
         uint32_t invalid_bytes_read;
     } rt_info;
 
-    cir_buffer_t *rbuffer;     // read buffer
-    cir_buffer_t *wbuffer;     // write buffer
     server_context_t *context; // Server context
 
     // Server handler functions
     struct
     {
-        void (*receiver)(const char *data, const int size);
-        void (*transmitter)(const char *data, const int size);
+        void (*receiver)( void* arg);
+        void (*transmitter)(void* arg);
     } handler_fns;
 
     // TODO: Add server configuration manager
@@ -68,5 +66,6 @@ void server_init(server_t *, server_params_t* );
 void server_start(server_t *);
 void server_stop(server_t *);
 void server_get_info(server_t *, char *info, const int cap);
+void server_destroy(server_t *);
 
 #endif // __SERVER_H__

@@ -16,15 +16,19 @@ typedef struct server_context
 {
     int sock;
     sockaddr_in_t addr;
+    int __internal;
 } server_context_t;
 
-void server_context_create_s(server_context_t *context, const char *ip, uint16_t port);
 server_context_t *server_context_create(const char *ip, uint16_t port);
+void server_context_init(server_context_t *context, const char *ip, uint16_t port);
 
 int server_context_create_socket(server_context_t *context);
 int server_context_bind_socket(server_context_t *context);
 
 int server_context_setsocket_opt(server_context_t *context, int level, int option, const void *val, socklen_t opt_len);
 int server_context_getsocket_opt(server_context_t *context, int level, int option, void *val, socklen_t *opt_len);
+
+void server_context_deinit(server_context_t *context );
+void server_context_destroy(server_context_t *context );
 
 #endif // __SERVER_CONTEXT_H__
