@@ -2,11 +2,13 @@
 #define __SERVER_H__
 
 #include "common.h"
+#include "routine.h"
 
 #define IP_ADDR_LEN 15
 
 struct server_context;
 
+typedef struct task task_t;
 typedef struct cir_buffer cir_buffer_t;
 typedef struct server_context server_context_t;
 
@@ -41,23 +43,24 @@ typedef struct server
     server_context_t *context; // Server context
 
     // Server handler functions
-    struct
-    {
-        void (*receiver)( void* arg);
-        void (*transmitter)(void* arg);
-    } handler_fns;
+    routine_t recv_rtn;
+    routine_t trmt_rtn;
+
+    task_t *receiver_task;          
+    task_t *transmitter_task;
 
     // TODO: Add server configuration manager
 } server_t;
 
 typedef struct server_params
 {
+
     uint16_t port;                                  // port
     uint32_t client_allow_mask;                     // client allow mask
     uint32_t rcv_to;                                // receiver timeout
-    void (*rcv_fn)(const char*, const int );       // receiver function
-    void (*tr_fn)(const char*, const int );        // transmitter function
-    char ip[IP_ADDR_LEN+1];                        // ip
+    routine_t recv_rtn;
+    routine_t trmt_rtn;
+    char ip[IP_ADDR_LEN+1];                         // ip address
 } server_params_t;
 
 

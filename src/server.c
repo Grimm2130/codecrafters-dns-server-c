@@ -2,6 +2,9 @@
 #include "cir_buffer.h"
 #include "server_context.h"
 #include "util.h"
+#include "tasks.h"
+
+#define ROUTINE_STACK_SIZE
 
 server_t *server_create( server_params_t* params )
 {
@@ -20,9 +23,21 @@ void server_init(server_t * srv, server_params_t* params )
     srv->net_config.server_ip = ip_str_to_n(params->ip);
     srv->net_config.server_port = params->port;
     srv->net_config.server_recv_timout = params->rcv_to;
-    srv->handler_fns.receiver = params->rcv_fn;
-    srv->handler_fns.transmitter = params->tr_fn;
     srv->admin_info.created = true;
+
+    // Setup routines
+
+    srv->recv_rtn.prio = params->recv_rtn.prio;
+    srv->recv_rtn.stack_size = params->recv_rtn.stack_size;
+    srv->recv_rtn._arg = params->recv_rtn._arg;
+    srv->recv_rtn._fn = params->recv_rtn._fn;
+    
+    srv->trmt_rtn.prio = params->trmt_rtn.prio;
+    srv->trmt_rtn.stack_size = params->trmt_rtn.stack_size;
+    srv->trmt_rtn._arg = params->trmt_rtn._arg;
+    srv->trmt_rtn._fn = params->trmt_rtn._fn;
+    
+    srv->receiver_task = srv->transmitter_task = NULL;
 }
 
 void server_start(server_t *srv)
@@ -39,8 +54,36 @@ void server_start(server_t *srv)
             // Bind socket
             if( (ret = server_context_bind_socket( srv->context)) >= 0 )
             {
-                // Start the receiver and transmitter threads
+                task_params_t task_param;
+
                 
+                // Start the receiver and transmitter threads
+                if( srv->recv_rtn._fn)
+                {
+                    task_param.can_join = true;
+                    task_param.prio = srv->recv_rtn.prio;
+                    task_param.stack_size = srv->recv_rtn.stack_size;
+                    task_param.fn = srv->recv_rtn._fn;
+                    task_param.arg = srv->recv_rtn._arg;
+                    
+                    srv->receiver_task = task_create( &task_param );
+                    
+                    task_start( srv->receiver_task );
+                }
+                
+                if( srv->trmt_rtn._fn)
+                {
+                    task_param.can_join = true;
+                    task_param.prio = srv->trmt_rtn.prio;
+                    task_param.stack_size = srv->trmt_rtn.stack_size;
+                    task_param.fn = srv->trmt_rtn._fn;
+                    task_param.arg = srv->trmt_rtn._arg;
+
+                    srv->receiver_task = task_create( &task_param );
+
+                    task_start( srv->transmitter_task );
+                }
+
             }
             else
             {

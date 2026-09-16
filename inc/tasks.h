@@ -1,12 +1,14 @@
 #if !defined(__TASKS_H__)
 #define __TASKS_H__
 
+#include "routine.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <pthread.h>
 
+
 typedef void* task_arg;
-typedef void* (*task_fn)(void* arg);
+typedef routine_fn task_fn;
 
 
 typedef struct task_params
