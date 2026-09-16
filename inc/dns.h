@@ -1,8 +1,8 @@
 #if !defined(__DNS_H__)
 #define __DNS_H__
 
-#define PORT 2053U
-#define IP   "0.0.0.0"
+#define DNS_PORT 2053U
+#define DNS_IP   "0.0.0.0"
 
 void dns_service_start();
 void dns_service_stop();

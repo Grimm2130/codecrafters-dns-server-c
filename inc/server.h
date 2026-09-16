@@ -26,7 +26,7 @@ typedef struct server
     /// @brief Server admin information
     struct
     {
-        bool created;
+        bool alive;
         bool receiver_active;
         bool transmitter_active;
     } admin_info;
@@ -69,6 +69,7 @@ void server_init(server_t *, server_params_t* );
 void server_start(server_t *);
 void server_stop(server_t *);
 void server_get_info(server_t *, char *info, const int cap);
+void server_deinit(server_t *);
 void server_destroy(server_t *);
 
 #endif // __SERVER_H__

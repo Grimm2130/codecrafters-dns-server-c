@@ -1,7 +1,7 @@
 #include "server.h"
 #include "cir_buffer.h"
 #include "server_context.h"
-#include "util.h"
+#include "utils.h"
 #include "tasks.h"
 
 #define ROUTINE_STACK_SIZE
@@ -23,7 +23,7 @@ void server_init(server_t * srv, server_params_t* params )
     srv->net_config.server_ip = ip_str_to_n(params->ip);
     srv->net_config.server_port = params->port;
     srv->net_config.server_recv_timout = params->rcv_to;
-    srv->admin_info.created = true;
+    srv->admin_info.alive = true;
 
     // Setup routines
 
@@ -132,7 +132,12 @@ void server_get_info(server_t *srv, char *info, const int cap)
     );
 }
 
+void server_deinit(server_t *srv)
+{
+    
+    srv->admin_info.alive = false;
+}
+
 void server_destroy(server_t *srv)
 {
-    srv->admin_info.created = false;
 }
