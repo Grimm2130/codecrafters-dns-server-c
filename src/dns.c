@@ -3,11 +3,11 @@
 #include "client_msg.h"
 #include "tasks.h"
 #include "./dns.h"
-#include "cir_buffer.h"
+#include "sync_cir_buffer.h"
 
 
 bool g_runFlag;
-cir_buffer_t transmit_buffer;
+sync_cir_buffer_t transmit_buffer;
 server_handle_t g_server_handle;
 task_t g_receiver;
 task_t g_transmitter;
@@ -24,22 +24,22 @@ static void * dns_receiver_routine( void * arg )
 {
     server_handle_t *srv_hndl = (server_handle_t*)arg;
     client_msg_t received;
-
+    int bytes;
 
     while( g_runFlag )
     {
-        server_handle_receive( srv_hndl, &received );
+        bytes = server_handle_receive( srv_hndl, &received );
 
         // handle received data
-        if( received.bytes > 0 )
+        if( bytes > 0 )
         {
             // Valid
-            srv_hndl->rt_info.read_bytes += received.bytes;
+            srv_hndl->rt_info.read_bytes += bytes;
 
             dns_handle_new_client_data( &received );
 
         }
-        else if( received.bytes == 0 )
+        else if( bytes == 0 )
         {
             srv_hndl->rt_info.read_timeouts++;
         }
@@ -56,18 +56,41 @@ static void * dns_receiver_routine( void * arg )
 
 static void * dns_transmitter_routine( void * arg )
 {
+    int bytes;
+    server_handle_t *srv_hndl = (server_handle_t*)arg;
+    client_msg_t to_transmit;
+
+    while( g_runFlag )
+    {
+        sync_cir_buffer_await_data( &transmit_buffer );
+        sync_cir_buffer_read( &transmit_buffer, (char*)&(to_transmit), sizeof(to_transmit) );
+
+        bytes = server_handle_send( srv_hndl, &to_transmit );
+
+        if( bytes > 0 )
+        {
+            // Valid
+            srv_hndl->rt_info.written_bytes += bytes;
+        }
+        else
+        {
+            srv_hndl->rt_info.invalid_transmits++;
+        }
+    }
+
     return NULL;
 }
 
 static void dns_handle_new_client_data( client_msg_t* msg )
 {
-    
+
+
 }
 
 void dns_service_start()
 {
     // initialize transmit buffer
-    cir_buffer_init( &transmit_buffer, false );
+    sync_cir_buffer_init( &transmit_buffer, false );
 
     // Intialize task params
     task_params_t task_param = {

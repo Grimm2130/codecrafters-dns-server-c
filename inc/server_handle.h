@@ -47,6 +47,7 @@ typedef struct server_handle
         uint32_t written_bytes;
         uint32_t read_timeouts;
         uint32_t invalid_receives;
+        uint32_t invalid_transmits;
     } rt_info;
 
     network_context_t *context; // server_handle context
@@ -65,8 +66,8 @@ typedef struct server_handle_params
 
 server_handle_t *server_handle_create(server_handle_params_t *);
 server_handle_ret_code_t server_handle_init(server_handle_t *, server_handle_params_t *);
-void server_handle_receive(server_handle_t *, client_msg_t *);
-void server_handle_send(server_handle_t *, client_msg_t * );
+int server_handle_receive(server_handle_t *, client_msg_t *);
+int server_handle_send(server_handle_t *, client_msg_t * );
 void server_handle_get_info(server_handle_t *, char *info, const int cap);
 server_handle_ret_code_t server_handle_deinit(server_handle_t *);
 server_handle_ret_code_t server_handle_destroy(server_handle_t *);

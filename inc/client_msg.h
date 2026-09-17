@@ -7,9 +7,9 @@
 
 typedef struct client_msg
 {
-    int bytes;
     network_context_t context;
     char data[CLIENT_MSG_SIZE];
+    int len;
 } client_msg_t;
 
 
