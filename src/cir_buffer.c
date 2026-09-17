@@ -6,12 +6,12 @@ cir_buffer_t* cir_buffer_create( const bool allow_overwrite )
 {
     cir_buffer_t* cbuf = calloc(1, sizeof(cir_buffer_t));
 
-    cir_buffer_create_s( cbuf, allow_overwrite );
+    cir_buffer_init( cbuf, allow_overwrite );
 
     return cbuf;
 }
 
-void cir_buffer_create_s( cir_buffer_t* cbuf, const bool allow_overwrite)
+void cir_buffer_init( cir_buffer_t* cbuf, const bool allow_overwrite)
 {
     cbuf->allow_overwrite = allow_overwrite;
     cbuf->front = cbuf->rear = cbuf->size = 0;
@@ -83,13 +83,19 @@ int cir_buffer_write( cir_buffer_t* cbuf, const char * buf, const uint32_t amnt 
     return amnt;
 }
 
-/// @brief Destroy the Circular buffer
-/// @param cbuf 
-void cir_buffer_destroy( cir_buffer_t* cbuf )
+void cir_buffer_deinit( cir_buffer_t* cbuf )
 {
     for( int i = 0; i < CIR_BUFFER_ENTRY_CAPACITY; i++ )
     {
         if( cbuf->buffer[i] ) free(cbuf->buffer[i]);
         cbuf->buffer[i] = NULL;
     }
+}
+
+/// @brief Call if cirbuffer returned vai create;
+/// @param cbuf 
+void cir_buffer_destroy( cir_buffer_t* cbuf )
+{
+    cir_buffer_deinit( cbuf );
+    free( cbuf );
 }

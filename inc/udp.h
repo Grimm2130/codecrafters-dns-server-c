@@ -1,7 +1,7 @@
 #if !defined(__UDP_H__)
 #define __UDP_H__
 
-#include "server_context.h"
+#include "network_context.h"
 
 void RunServer();
 
