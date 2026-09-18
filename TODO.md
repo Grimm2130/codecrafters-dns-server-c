@@ -1,8 +1,8 @@
 # TODO
 
-- [ ] Test Utils
+- [x] Test Utils
+- [x] Test Cirular buffer - No allow overwrite
+- [x] Test Cirular buffer - Allow overwrite
+- [x] Test Tasks
 - [ ] Test network context
-- [ ] Test Tasks
-- [ ] Test Cirular buffer - No allow overwrite
-- [ ] Test Cirular buffer - Allow overwrite
 - [ ] Test Synchronous Circular buffer

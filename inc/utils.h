@@ -7,7 +7,7 @@
 #define _MAX(a, b)  ((a) > (b) ? (a) : (b))
 
 uint32_t ip_str_to_n(const char *ip);
-uint32_t ip_n_to_str(uint32_t ip_n, char *ip_str, const uint32_t len);
+int ip_n_to_str(uint32_t ip_n, char *ip_str, const uint32_t len);
 
 
 #endif // __UTILS_H__

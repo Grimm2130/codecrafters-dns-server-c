@@ -9,6 +9,8 @@ include_directories(
 file(GLOB_RECURSE SOURCE_FILES src/*.c src/*.h)
 
 file(GLOB TESTS_FILES 
+    src/task.c
+    src/utils.c
     src/cir_buffer.c
     tests/*
 )

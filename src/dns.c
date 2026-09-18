@@ -18,6 +18,7 @@ typedef enum dns_service_ret_code
     DNS_ERROR_INVALID
 } dns_service_ret_code_t;
 
+static void print_msg( const char* data, const int len );
 static void dns_handle_new_client_data( client_msg_t* msg );
 
 static void * dns_receiver_routine( void * arg )
@@ -62,8 +63,7 @@ static void * dns_transmitter_routine( void * arg )
 
     while( g_runFlag )
     {
-        sync_cir_buffer_await_data( &transmit_buffer );
-        sync_cir_buffer_read( &transmit_buffer, (char*)&(to_transmit), sizeof(to_transmit) );
+        sync_cir_buffer_read( &transmit_buffer, (char*)&(to_transmit), sizeof(to_transmit), false );
 
         bytes = server_handle_send( srv_hndl, &to_transmit );
 
@@ -83,8 +83,13 @@ static void * dns_transmitter_routine( void * arg )
 
 static void dns_handle_new_client_data( client_msg_t* msg )
 {
+    static char server_status[200];
 
+    server_handle_get_info( &g_server_handle, server_status, 200 );
+    printf("Server Status : %s\n", server_status);
 
+    printf("Received: ");
+    print_msg( msg->data, msg->len );
 }
 
 void dns_service_start()
@@ -110,13 +115,17 @@ void dns_service_start()
 
     server_handle_init( &g_server_handle, &server_handle_param );
 
+    // initialize receiver routine
     task_init( &g_receiver, &task_param );
     
     task_param.fn = dns_transmitter_routine;
+    
+    // initialize transmitter routine
     task_init( &g_transmitter, &task_param );
     
     g_runFlag = true;
     
+    // Start transmitter
     task_start(&g_receiver);
     task_start(&g_transmitter);
 }
@@ -125,7 +134,16 @@ void dns_service_stop()
 {
     g_runFlag = false;
 
-    server_handle_stop( &g_server_handle );
+    server_handle_deinit( &g_server_handle );
     
+}
 
+
+static void print_msg( const char* data, const int len )
+{
+    for( int i = 0; i < len; i++ )
+    {
+        printf("%x ", data[i]);
+    }
+    printf("\n");
 }

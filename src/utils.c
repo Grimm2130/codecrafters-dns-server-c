@@ -20,20 +20,23 @@ uint32_t ip_str_to_n(const char *ip)
         }
         else
         {
-            temp = (temp * 10) + ip[i] - '0';
+            temp = (temp * 10) + (ip[i] - '0');
         }
     }
+    
+    // last octet
+    num |= (temp << (8 * step));
 
     return num;
 }
 
-uint32_t ip_n_to_str(uint32_t ip_n, char *ip_str, const uint32_t len)
+int ip_n_to_str(uint32_t ip_n, char *ip_str, const uint32_t len)
 {
     return snprintf(ip_str, len, "%u.%u.%u.%u",
-        0xFF && (ip_n >> 24),
-        0xFF && (ip_n >> 16),
-        0xFF && (ip_n >> 8),
-        0xFF && ip_n
+        0xFF & (ip_n >> 24),
+        0xFF & (ip_n >> 16),
+        0xFF & (ip_n >> 8),
+        0xFF & ip_n
     );
 }
 

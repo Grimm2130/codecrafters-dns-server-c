@@ -68,7 +68,8 @@ server_handle_ret_code_t server_handle_init(server_handle_t *srv, server_handle_
 int server_handle_receive(server_handle_t *srv, client_msg_t* msg )
 {
     socklen_t addrlen;
-    return recvfrom( srv->context->sock, msg->data, msg->len, 0, (sockaddr_t*)(&(msg->context.addr)), &addrlen );
+    msg->len = recvfrom( srv->context->sock, msg->data, CLIENT_MSG_SIZE, 0, (sockaddr_t*)(&(msg->context.addr)), &addrlen );
+    return msg->len;
 }
 
 int server_handle_send(server_handle_t *srv, client_msg_t* msg )
