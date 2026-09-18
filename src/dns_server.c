@@ -82,11 +82,6 @@ static void *dns_transmitter_routine(void *arg)
 
 static void dns_handle_new_client_data(client_msg_t *msg)
 {
-    static char server_status[200];
-
-    server_handle_get_info(&g_server_handle, server_status, 200);
-    printf("Server Status : %s\n", server_status);
-
     printf(">>> Received: ");
     print_msg(msg->data, msg->len);
 
@@ -148,6 +143,17 @@ void dns_service_start()
     // Start transmitter
     task_start(&g_receiver);
     task_start(&g_transmitter);
+
+    static char server_status[200];
+
+    
+    while(1)
+    {
+        server_handle_get_info(&g_server_handle, server_status, 200);
+        printf("Server Status : %s\n", server_status);
+
+        sleep(3);
+    }
 }
 
 void dns_service_stop()
