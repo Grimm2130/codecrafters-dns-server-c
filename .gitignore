@@ -55,4 +55,4 @@ build
 vcpkg_installed
 
 bin/
-*.log
+test.log*

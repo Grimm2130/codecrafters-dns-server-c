@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "udp.h"							
+#include "dns_server.h"							
 
 int main() {
 	// Disable output buffering
@@ -11,7 +12,11 @@ int main() {
     printf("Logs from your program will appear here!\n");
 
     // TODO: Uncomment the code below to pass the first stage
-	RunServer();
+	// RunServer();
+
+	dns_service_start();
+
+	dns_service_stop();
  
     return 0;
 }

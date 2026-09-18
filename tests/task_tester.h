@@ -17,7 +17,7 @@ static void *task_test_routines( void* arg )
     char fullPath[100];
     uint64_t iters = *(uint64_t*)arg;
 
-    snprintf( fullPath, 100, "Task_%llu", iters );
+    snprintf( fullPath, 100, "test.log.task.log.%llu.log", iters );
 
     if( (fp = fopen( fullPath, "w")) )
     {
@@ -58,7 +58,7 @@ static bool init_tasks()
         param[i].stack_size = 1024;
         param[i].fn = task_test_routines;
         arg = (uint64_t*)malloc(sizeof(u_int64_t));
-        *arg = (i + 1) * 1e9;
+        *arg = (i + 1) * 1e3;
         param[i].arg = (void*)arg;
 
         task_init( &tasks[i], &param[i] );

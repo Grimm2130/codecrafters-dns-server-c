@@ -4,16 +4,16 @@
 #include "network_context.h"
 #include "memory.h"
 
-#define CLIENT_MSG_SIZE 1024
+#define CLIENT_DATA_SIZE 1024
 
 typedef struct client_msg
 {
     int len;
     network_context_t context;
-    char data[CLIENT_MSG_SIZE];
+    char data[CLIENT_DATA_SIZE];
 } client_msg_t;
 
-// #define CLIENT_MSG_READ(client, msg, len )      \
+#define CLIENT_MSG_SIZE sizeof(client_msg_t)
 
 // void client_msg_write( client_msg_t *, const char * _data, const uint32_t len );
 // void client_msg_read( client_msg_t *, char * _data, const uint32_t len );

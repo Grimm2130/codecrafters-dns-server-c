@@ -23,7 +23,7 @@ typedef struct dns_hdr
     uint16_t ar_count : 16;
 } __attribute__((packed)) dns_hdr_t;
 
-#define DSN_MSG_SIZE (sizeof(dns_hdr_t))
+#define DSN_HDR_SIZE (sizeof(dns_hdr_t))
 
 /*===================================  Header  ==================================*/
 
