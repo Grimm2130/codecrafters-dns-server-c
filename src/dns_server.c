@@ -82,7 +82,7 @@ static void *dns_transmitter_routine(void *arg)
 
 static void dns_handle_new_client_data(client_msg_t *msg)
 {
-    printf(">>> Received: ");
+    printf(">>> Received: (%d)", msg->len);
     print_msg(msg->data, msg->len);
 
     dns_hdr_t hdr = {
