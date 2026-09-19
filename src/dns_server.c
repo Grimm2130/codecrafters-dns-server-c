@@ -154,9 +154,6 @@ static void dns_handle_new_client_data(client_msg_t *msg)
     printf(">>> Received [%d] bytes from %s:%u -> ", msg->len, ip, ntohs(msg->context.addr.sin_port));
     print_msg((uint8_t*)msg->data, msg->len);
 
-    printf(">>> Received [%d] bytes from %s:%u -> ", msg->len, ip, ntohs(msg->context.addr.sin_port));
-    print_msg((uint8_t*)msg->data, msg->len);
-
     dns_hdr_t hdr = {
         .id = 1234,
         .qr = 1,
@@ -179,10 +176,6 @@ static void dns_handle_new_client_data(client_msg_t *msg)
     memset(response.data, 0, DSN_HDR_SIZE);
     dns_hdr_serialize(&hdr, response.data);
     response.len = DSN_HDR_SIZE;
-
-    ip_n_to_str(ntohl(response.context.addr.sin_addr.s_addr), ip, 20);
-    printf(">>> Enqueing [%d] bytes to send to %s:%u -> ", response.len, ip, ntohs(response.context.addr.sin_port));
-    print_msg((uint8_t*)response.data, response.len);
 
     enqueue_client_message(&response);
 }
