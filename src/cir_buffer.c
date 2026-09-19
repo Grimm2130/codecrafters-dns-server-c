@@ -70,10 +70,10 @@ int cir_buffer_write(cir_buffer_t *cbuf, const char *buf, const uint32_t amnt)
     if (cir_buffer_is_full(cbuf))
     {
         // release current data at read index
-        if( cbuf->allow_overwrite )
+        if (cbuf->allow_overwrite)
         {
             can_write = true;
-            free(cbuf->buffer[ cbuf->front ]);
+            free(cbuf->buffer[cbuf->front]);
             cbuf->front = (cbuf->front + 1) % CIR_BUFFER_CAPACITY;
             cbuf->size--;
         }

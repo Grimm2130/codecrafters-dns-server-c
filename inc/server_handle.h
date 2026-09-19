@@ -13,7 +13,6 @@ typedef struct cir_buffer cir_buffer_t;
 typedef struct network_context network_context_t;
 typedef struct client_msg client_msg_t;
 
-
 typedef enum server_handle_ret_code
 {
     SRV_HNDL_SUCCESS,
@@ -61,13 +60,13 @@ typedef struct server_handle_params
     uint16_t port;              // port
     uint32_t client_allow_mask; // client allow mask
     uint32_t rcv_to;            // receiver timeout
-    char ip[IP_ADDR_LEN + 1]; // ip address
+    char ip[IP_ADDR_LEN + 1];   // ip address
 } server_handle_params_t;
 
 server_handle_t *server_handle_create(server_handle_params_t *);
 server_handle_ret_code_t server_handle_init(server_handle_t *, server_handle_params_t *);
 int server_handle_receive(server_handle_t *, client_msg_t *);
-int server_handle_send(server_handle_t *, client_msg_t * );
+int server_handle_send(server_handle_t *, client_msg_t *);
 void server_handle_get_info(server_handle_t *, char *info, const int cap);
 server_handle_ret_code_t server_handle_deinit(server_handle_t *);
 server_handle_ret_code_t server_handle_destroy(server_handle_t *);

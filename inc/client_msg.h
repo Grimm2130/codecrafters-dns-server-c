@@ -15,7 +15,6 @@ typedef struct client_msg
 
 #define CLIENT_MSG_SIZE sizeof(client_msg_t)
 
-// void client_msg_write( client_msg_t *, const char * _data, const uint32_t len );
-// void client_msg_read( client_msg_t *, char * _data, const uint32_t len );
+#define CLIENT_MSG_CPY(dst, src) (memcpy((dst), (src), CLIENT_MSG_SIZE))
 
 #endif // __CLIENT_INFO_H__

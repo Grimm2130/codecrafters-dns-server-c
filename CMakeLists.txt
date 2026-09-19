@@ -12,6 +12,7 @@ file(GLOB TESTS_FILES
     src/task.c
     src/utils.c
     src/cir_buffer.c
+    src/sync_cir_buffer.c
     tests/*
 )
 

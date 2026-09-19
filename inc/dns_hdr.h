@@ -25,6 +25,17 @@ typedef struct dns_hdr
 
 #define DSN_HDR_SIZE (sizeof(dns_hdr_t))
 
+#define DNS_HDR_FLAGS_AS_U16(hdr_ptr)     (     \
+            ((hdr_ptr)->rcode) |                \
+            ((hdr_ptr)->rz << 4) |              \
+            ((hdr_ptr)->ra << 7) |              \
+            ((hdr_ptr)->rd << 8) |              \
+            ((hdr_ptr)->tc << 9) |              \
+            ((hdr_ptr)->aa << 10) |             \
+            ((hdr_ptr)->opcode << 11) |         \
+            ((hdr_ptr)->qr << 15)               \
+    )
+
 /*===================================  Header  ==================================*/
 
 #endif // __DNS_HDR_H__

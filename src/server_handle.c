@@ -65,14 +65,14 @@ server_handle_ret_code_t server_handle_init(server_handle_t *srv, server_handle_
 
 int server_handle_receive(server_handle_t *srv, client_msg_t *msg)
 {
-    socklen_t addrlen;
+    socklen_t addrlen = sizeof(sockaddr_in_t);
     msg->len = recvfrom(srv->context->sock, msg->data, CLIENT_DATA_SIZE, 0, (sockaddr_t *)(&(msg->context.addr)), &addrlen);
     return msg->len;
 }
 
 int server_handle_send(server_handle_t *srv, client_msg_t *msg)
 {
-    return sendto(srv->context->sock, msg->data, msg->len, 0, (sockaddr_t *)(&(msg->context.addr)), sizeof(msg->context.addr));
+    return sendto(srv->context->sock, msg->data, msg->len, 0, (const sockaddr_t *)(&(msg->context.addr)), sizeof(msg->context.addr));
 }
 
 /// @brief Retrieve server_handle information

@@ -56,3 +56,5 @@ vcpkg_installed
 
 bin/
 test.log*
+
+.vscode

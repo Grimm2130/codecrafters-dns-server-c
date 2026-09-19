@@ -57,7 +57,7 @@ static void test_cir_buffer_read(int cnt)
 static void test_cir_buffer_write(int cnt)
 {
     int count = 0;
-    while ((count < cnt) && (count < STUDENT_COUNT) )
+    while ((count < cnt) && (count < STUDENT_COUNT))
     {
         cir_buffer_write(&cbuf, (char *)(&students[count]), STUDENT_SIZE);
         printf("Wrote " STUDENT_STR((&students[count])));
@@ -92,7 +92,7 @@ void run_tests_cir_buffer()
     test_cir_buffer_write(CIR_BUFFER_CAPACITY * 3);
     test_cir_buffer_empty(false);
     test_cir_buffer_full(true);
-    
+
     test_cir_buffer_read(CIR_BUFFER_CAPACITY);
     test_cir_buffer_empty(true);
     test_cir_buffer_full(false);
