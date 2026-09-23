@@ -6,7 +6,7 @@
 - [x] Test Tasks
 - [x] Test network context
 - [x] Test Synchronous Circular buffer
-- [ ] Test Serializer
-- [ ] Review Bit operation
-- [ ] Test Bit Ops
+- [x] Test Serializer
+- [ ] Review Bit operation relevant to implementations
 - [ ] Test NetSerializer
+- [ ] Test Bit Ops

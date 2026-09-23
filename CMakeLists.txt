@@ -13,6 +13,7 @@ file(GLOB TESTS_FILES
     src/utils.c
     src/cir_buffer.c
     src/sync_cir_buffer.c
+    src/serializer.c
     tests/*
 )
 

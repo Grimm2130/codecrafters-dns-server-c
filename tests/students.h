@@ -1,6 +1,8 @@
 #if !defined(__STUDENTS_H__)
 #define __STUDENTS_H__
 
+#include "string.h"
+
 typedef struct student
 {
     int id, age;
@@ -2015,6 +2017,12 @@ student_t students[STUDENT_COUNT] =
         {101999, 24, "Aiden", "Davis"}};
 
 #define STUDENT_STR(st_ptr) "{id: %d, first_name: %s, last_name: %s, age: %d}\n", (st_ptr)->id, (st_ptr)->first_name, (st_ptr)->last_name, (st_ptr)->age
+
+#define STUDENT_CMP( st1, st2 )                             \
+        ((st1)->id == (st2)->id)  &&                              \
+        ((st1)->age == (st2)->age)  &&                            \
+        (strcmp((st1)->first_name, (st2)->first_name) == 0) &&    \
+        (strcmp((st1)->last_name, (st2)->last_name) == 0)
 
 const int student_count = STUDENT_COUNT;
 
