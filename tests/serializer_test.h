@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <stdbool.h>
 
-serializer_t g_serializer;
+static serializer_t g_serializer;
 
 void run_test_serializer();
 

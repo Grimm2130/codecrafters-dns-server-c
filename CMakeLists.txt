@@ -10,10 +10,12 @@ file(GLOB_RECURSE SOURCE_FILES src/*.c src/*.h)
 
 file(GLOB TESTS_FILES 
     src/task.c
+    src/bitops.c
     src/utils.c
     src/cir_buffer.c
     src/sync_cir_buffer.c
     src/serializer.c
+    src/network_serializer.c
     tests/*
 )
 

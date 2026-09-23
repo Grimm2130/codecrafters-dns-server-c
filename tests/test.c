@@ -3,6 +3,7 @@
 #include "task_tester.h"
 #include "sync_cir_buffer_tester.h"
 #include "serializer_test.h"
+#include "net_serializer_tester.h"
 
 int main(int argc, char const *argv[])
 {
