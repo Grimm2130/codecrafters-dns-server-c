@@ -61,7 +61,7 @@ int net_serializer_append_u32( net_serializer_t* srz, const uint32_t *data, cons
         serializer_append( srz->_srz, (const char*)&data_end_aware, sizeof(uint32_t) );
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_append_u64( net_serializer_t* srz, const uint64_t *data, const uint32_t len )
@@ -76,7 +76,7 @@ int net_serializer_append_u64( net_serializer_t* srz, const uint64_t *data, cons
         serializer_append( srz->_srz, (const char*)&data_end_aware, sizeof(uint64_t) );
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_insert_u8( net_serializer_t* srz, const uint32_t start_idx, const uint8_t *data, const uint32_t len )
@@ -93,7 +93,7 @@ int net_serializer_insert_u8( net_serializer_t* srz, const uint32_t start_idx, c
         offset += sizeof(uint8_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_insert_u16( net_serializer_t* srz, const uint32_t start_idx, const uint16_t *data, const uint32_t len )
@@ -110,7 +110,7 @@ int net_serializer_insert_u16( net_serializer_t* srz, const uint32_t start_idx, 
         offset += sizeof(uint16_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_insert_u32( net_serializer_t* srz, const uint32_t start_idx, const uint32_t *data, const uint32_t len )
@@ -127,7 +127,7 @@ int net_serializer_insert_u32( net_serializer_t* srz, const uint32_t start_idx, 
         offset += sizeof(uint32_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_insert_u64( net_serializer_t* srz, const uint32_t start_idx, const uint64_t *data, const uint32_t len )
@@ -144,7 +144,7 @@ int net_serializer_insert_u64( net_serializer_t* srz, const uint32_t start_idx, 
         offset += sizeof(uint64_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_remove_u8( net_serializer_t* srz, const uint32_t start_idx, uint8_t *data, const uint32_t len )
@@ -161,7 +161,7 @@ int net_serializer_remove_u8( net_serializer_t* srz, const uint32_t start_idx, u
         offset += sizeof(uint8_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_remove_u16( net_serializer_t* srz, const uint32_t start_idx, uint16_t *data, const uint32_t len )
@@ -224,12 +224,12 @@ int net_serializer_copy_u8( net_serializer_t* srz, const uint32_t start_idx, uin
 
     for( int i = 0; i < len; i++ )
     {
-        serializer_remove( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint8_t) );
+        serializer_copy( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint8_t) );
         data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip8(data_end_aware) : data_end_aware;
         offset += sizeof(uint8_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_copy_u16( net_serializer_t* srz, const uint32_t start_idx, uint16_t *data, const uint32_t len )
@@ -241,12 +241,12 @@ int net_serializer_copy_u16( net_serializer_t* srz, const uint32_t start_idx, ui
 
     for( int i = 0; i < len; i++ )
     {
-        serializer_remove( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint16_t) );
+        serializer_copy( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint16_t) );
         data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip16(data_end_aware) : data_end_aware;
         offset += sizeof(uint16_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_copy_u32( net_serializer_t* srz, const uint32_t start_idx, uint32_t *data, const uint32_t len )
@@ -258,12 +258,12 @@ int net_serializer_copy_u32( net_serializer_t* srz, const uint32_t start_idx, ui
 
     for( int i = 0; i < len; i++ )
     {
-        serializer_remove( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint32_t) );
+        serializer_copy( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint32_t) );
         data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip32(data_end_aware) : data_end_aware;
         offset += sizeof(uint32_t);
     }
 
-    return 1;
+    return 0;
 }
 
 int net_serializer_copy_u64( net_serializer_t* srz, const uint32_t start_idx, uint64_t *data, const uint32_t len )
@@ -275,12 +275,12 @@ int net_serializer_copy_u64( net_serializer_t* srz, const uint32_t start_idx, ui
 
     for( int i = 0; i < len; i++ )
     {
-        serializer_remove( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint64_t) );
+        serializer_copy( srz->_srz, start_idx + offset, (char*)&data_end_aware, sizeof(uint64_t) );
         data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip64(data_end_aware) : data_end_aware;
         offset += sizeof(uint64_t);
     }
 
-    return 1;
+    return 0;
 }
 
 void net_serializer_deinit( net_serializer_t* srz )

@@ -12,6 +12,7 @@ int main(int argc, char const *argv[])
     run_tests_task();
     run_test_sync_cir_buffer();
     run_test_serializer();
+    run_tests_net_serializer();
     printf("All tests passed\n");
     return 0;
 }

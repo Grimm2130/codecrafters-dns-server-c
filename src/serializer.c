@@ -1,6 +1,7 @@
 #include "serializer.h"
 #include <stdlib.h>
 #include <memory.h>
+#include <stdio.h>
 
 #define SERIALIZER_DEFAULT_CAPACITY 1048576U
 
@@ -83,6 +84,21 @@ int serializer_copy( serializer_t *srz, const uint32_t start_idx, char* data, in
     }
 
     return ret;
+}
+
+const char* serializer_dump( serializer_t *srz )
+{
+    #define SERIALIZER_DUMP_BUFFER_SIZE     (SERIALIZER_DEFAULT_CAPACITY * 4)
+    static char buf[SERIALIZER_DUMP_BUFFER_SIZE];
+    int len = 0;
+
+    for( uint32_t i = 0; i < srz->size; i++ )
+    {
+        len += snprintf( buf + len, SERIALIZER_DUMP_BUFFER_SIZE - len, "0x%.2x ", srz->buf[i] );
+    }
+    buf[len] = '\0';
+
+    return buf;
 }
 
 void serializer_deinit( serializer_t *srz )
