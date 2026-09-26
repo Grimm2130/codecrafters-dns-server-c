@@ -180,7 +180,7 @@ static void dns_handle_new_client_data(client_msg_t *msg)
 
     // copy header info
     memset(response.data, 0, DSN_HDR_SIZE);
-    dns_hdr_serialize(&hdr, response.data);
+    dns_hdr_serialize(&hdr, response.data, CLIENT_DATA_SIZE );
     response.len = DSN_HDR_SIZE;
 
     enqueue_client_message(&response);
@@ -227,5 +227,5 @@ static void dns_hdr_serialize(dns_hdr_t *hdr, char *buffer, const uint32_t size 
     temp = hdr->ar_count;
     net_serializer_append_u16( &g_serializer, &temp, 1 );
 
-    net_serializer_copy_raw( &g_serializer, 0, buffer, DSN_HDR_SIZE );
+    net_serializer_copy_raw( &g_serializer, 0, buffer, _MIN( DSN_HDR_SIZE, size ) );
 }
