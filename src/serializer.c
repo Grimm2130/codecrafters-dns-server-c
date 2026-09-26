@@ -86,6 +86,11 @@ int serializer_copy( serializer_t *srz, const uint32_t start_idx, char* data, in
     return ret;
 }
 
+const char* serializer_getbuf( serializer_t * srz )
+{
+    return (const char*)srz->buf;
+}
+
 const char* serializer_dump( serializer_t *srz )
 {
     #define SERIALIZER_DUMP_BUFFER_SIZE     (SERIALIZER_DEFAULT_CAPACITY * 4)

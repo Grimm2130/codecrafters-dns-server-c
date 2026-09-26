@@ -283,6 +283,31 @@ int net_serializer_copy_u64( net_serializer_t* srz, const uint32_t start_idx, ui
     return 0;
 }
 
+int net_serializer_append_raw( net_serializer_t* srz, const char *data, const uint32_t len )
+{
+    return serializer_append( srz->_srz, data, len );
+}
+
+int net_serializer_insert_raw( net_serializer_t* srz, const uint32_t start_idx, const char *data, const uint32_t len )
+{
+    return serializer_insert( srz->_srz, start_idx, data, len );
+}
+
+int net_serializer_remove_raw( net_serializer_t* srz, const uint32_t start_idx, char *data, const uint32_t len )
+{
+    return serializer_remove( srz->_srz, start_idx, data, len );
+}
+
+int net_serializer_copy_raw( net_serializer_t* srz, const uint32_t start_idx, char *data, const uint32_t len )
+{
+    return serializer_copy( srz->_srz, start_idx, data, len );
+}
+
+const char * net_serializer_getbuf( net_serializer_t * srz )
+{
+    return serializer_getbuf( srz->_srz );
+}
+
 void net_serializer_deinit( net_serializer_t* srz )
 {
     serializer_release(srz->_srz);

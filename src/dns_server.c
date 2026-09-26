@@ -5,12 +5,15 @@
 #include "dns_server.h"
 #include "dns_hdr.h"
 #include "sync_cir_buffer.h"
+#include "network_serializer.h"
+#include "serializer.h"
 
 bool g_runFlag;
 task_t g_receiver;
 task_t g_transmitter;
 server_handle_t g_server_handle;
 sync_cir_buffer_t g_transmit_buffer;
+net_serializer_t g_serializer;
 
 typedef enum dns_service_ret_code
 {
@@ -22,7 +25,7 @@ static void print_msg(const uint8_t *data, const int len);
 static void dns_handle_new_client_data(client_msg_t *msg);
 static void enqueue_client_message(const client_msg_t *msg);
 static void dequeue_client_message(client_msg_t *msg);
-static void dns_hdr_serialize(dns_hdr_t *hdr, char *buffer);
+static void dns_hdr_serialize(dns_hdr_t *hdr, char *buffer, const uint32_t size );
 
 static void *dns_receiver_routine(void *arg)
 {
@@ -92,6 +95,9 @@ static void *dns_transmitter_routine(void *arg)
 
 void dns_service_start()
 {
+    // Initialize the serializer
+    net_serializer_init( &g_serializer );
+
     // initialize transmit buffer
     sync_cir_buffer_init(&g_transmit_buffer, false);
 
@@ -199,26 +205,27 @@ static void dequeue_client_message(client_msg_t *msg)
     sync_cir_buffer_read(&g_transmit_buffer, (char *)msg, CLIENT_MSG_SIZE, false);
 }
 
-static void dns_hdr_serialize(dns_hdr_t *hdr, char *buffer)
+static void dns_hdr_serialize(dns_hdr_t *hdr, char *buffer, const uint32_t size )
 {
     int len = 0;
-    uint16_t temp;
 
-    temp = htons(hdr->id);
-    memcpy(buffer, &temp, sizeof(uint16_t));
+    uint16_t temp = hdr->id;
+    net_serializer_append_u16( &g_serializer, &temp, 1 );
 
-    temp = htons(DNS_HDR_FLAGS_AS_U16(hdr));
-    memcpy(buffer + 2, &temp, sizeof(uint16_t));
+    temp = DNS_HDR_FLAGS_AS_U16(hdr);
+    net_serializer_append_u16( &g_serializer, &temp, 1 );
+    
+    temp = hdr->qd_count;
+    net_serializer_append_u16( &g_serializer, &temp, 1 );
+    
+    temp = hdr->an_count;
+    net_serializer_append_u16( &g_serializer, &temp, 1 );
+    
+    temp = hdr->ns_count;
+    net_serializer_append_u16( &g_serializer, &temp, 1 );
+    
+    temp = hdr->ar_count;
+    net_serializer_append_u16( &g_serializer, &temp, 1 );
 
-    temp = htons(hdr->qd_count);
-    memcpy(buffer + 4, &temp, sizeof(uint16_t));
-
-    temp = htons(hdr->an_count);
-    memcpy(buffer + 6, &temp, sizeof(uint16_t));
-
-    temp = htons(hdr->ns_count);
-    memcpy(buffer + 8, &temp, sizeof(uint16_t));
-
-    temp = htons(hdr->ar_count);
-    memcpy(buffer + 10, &temp, sizeof(uint16_t));
+    net_serializer_copy_raw( &g_serializer, 0, buffer, DSN_HDR_SIZE );
 }
