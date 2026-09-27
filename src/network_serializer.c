@@ -308,6 +308,11 @@ const char * net_serializer_getbuf( net_serializer_t * srz )
     return serializer_getbuf( srz->_srz );
 }
 
+void net_serializer_clear( net_serializer_t* srz )
+{
+    serializer_clear( srz->_srz );
+}
+
 void net_serializer_deinit( net_serializer_t* srz )
 {
     serializer_release(srz->_srz);

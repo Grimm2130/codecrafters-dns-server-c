@@ -106,6 +106,11 @@ const char* serializer_dump( serializer_t *srz )
     return buf;
 }
 
+void serializer_clear( serializer_t *srz )
+{
+    srz->size = 0;
+}
+
 void serializer_deinit( serializer_t *srz )
 {
     if( srz->buf ) free( srz->buf );

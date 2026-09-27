@@ -3,39 +3,48 @@
 
 #include <stdint.h>
 
-
-/*===================================  Header  ==================================*/
-
 typedef struct dns_hdr
 {
-    uint16_t id : 16;               // packet identifier
-    uint16_t qr : 1;                // Query = 0, Response = 1
-    uint16_t opcode : 4;            // Kind of query
-    uint16_t aa : 1;                // Authorative answer
-    uint16_t tc : 1;                // Truncation
-    uint16_t rd : 1;                // Recursion Desired
-    uint16_t ra : 1;                // Recursion Available
-    uint16_t rz : 3;                // reserved
-    uint16_t rcode : 4;             // Response code
-    uint16_t qd_count : 16;         // Question Count
-    uint16_t an_count : 16;         // Answer Record Count
-    uint16_t ns_count : 16;         // Authority Record count
-    uint16_t ar_count : 16;         // Additional Recoud count
+    uint16_t id : 16;       // packet identifier
+    uint16_t qr : 1;        // Query = 0, Response = 1
+    uint16_t opcode : 4;    // Kind of query
+    uint16_t aa : 1;        // Authorative answer
+    uint16_t tc : 1;        // Truncation
+    uint16_t rd : 1;        // Recursion Desired
+    uint16_t ra : 1;        // Recursion Available
+    uint16_t rz : 3;        // reserved
+    uint16_t rcode : 4;     // Response code
+    uint16_t qd_count : 16; // Question Count
+    uint16_t an_count : 16; // Answer Record Count
+    uint16_t ns_count : 16; // Authority Record count
+    uint16_t ar_count : 16; // Additional Recoud count
 } __attribute__((packed)) dns_hdr_t;
 
 #define DSN_HDR_SIZE (sizeof(dns_hdr_t))
 
-#define DNS_HDR_FLAGS_AS_U16(hdr_ptr)     (     \
-            ((hdr_ptr)->rcode) |                \
-            ((hdr_ptr)->rz << 4) |              \
-            ((hdr_ptr)->ra << 7) |              \
-            ((hdr_ptr)->rd << 8) |              \
-            ((hdr_ptr)->tc << 9) |              \
-            ((hdr_ptr)->aa << 10) |             \
-            ((hdr_ptr)->opcode << 11) |         \
-            ((hdr_ptr)->qr << 15)               \
-    )
+#define DNS_HDR_FLAGS_TO_U16(hdr_ptr) ( \
+    ((hdr_ptr)->rcode) |                \
+    ((hdr_ptr)->rz << 4) |              \
+    ((hdr_ptr)->ra << 7) |              \
+    ((hdr_ptr)->rd << 8) |              \
+    ((hdr_ptr)->tc << 9) |              \
+    ((hdr_ptr)->aa << 10) |             \
+    ((hdr_ptr)->opcode << 11) |         \
+    ((hdr_ptr)->qr << 15))
 
-/*===================================  Header  ==================================*/
+#define DNS_HDR_FLAG_FROM_U16( hdr_ptr, u16 )   \
+    (hdr_ptr)->qr = ((u16) >> 15) & 0x1;         \
+    (hdr_ptr)->opcode = ((u16) >> 11) & 0xF;     \
+    (hdr_ptr)->aa = ((u16) >> 10) & 0x1;         \
+    (hdr_ptr)->tc = ((u16) >> 9) & 0x1;          \
+    (hdr_ptr)->rd = ((u16) >> 8) & 0x1;          \
+    (hdr_ptr)->ra = ((u16) >> 7) & 0x1;          \
+    (hdr_ptr)->rz = ((u16) >> 4) & 0x7;          \
+    (hdr_ptr)->rcode = (u16) & 0x1;
+
+
+void dns_hdr_init(dns_hdr_t *hdr);
+uint32_t dns_hdr_serialize(dns_hdr_t *hdr, char *out_buf, const uint32_t size);
+uint32_t dns_hdr_deserialize(dns_hdr_t *hdr, const char *in_buf, const uint32_t size);
 
 #endif // __DNS_HDR_H__

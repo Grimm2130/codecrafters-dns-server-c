@@ -30,6 +30,7 @@ int serializer_remove( serializer_t *srz, const uint32_t start_idx, char* data, 
 int serializer_copy( serializer_t *srz, const uint32_t start_idx, char* data, int len );
 const char* serializer_getbuf( serializer_t * srz );
 const char* serializer_dump( serializer_t *srz );
+void serializer_clear( serializer_t *srz );
 void serializer_deinit( serializer_t *srz );
 void serializer_release( serializer_t *srz );
 

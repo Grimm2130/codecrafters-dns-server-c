@@ -42,6 +42,7 @@ int net_serializer_copy_raw( net_serializer_t* srz, const uint32_t start_idx, ch
 
 const char * net_serializer_getbuf( net_serializer_t * srz );
 
+void net_serializer_clear( net_serializer_t* srz );
 void net_serializer_deinit( net_serializer_t* srz );
 void net_serializer_release( net_serializer_t* srz );
 
