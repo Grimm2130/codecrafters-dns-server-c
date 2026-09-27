@@ -24,6 +24,7 @@ typedef struct serializer
 
 serializer_t * serializer_create( );
 void serializer_init( serializer_t *srz );
+uint32_t serializer_get_size( serializer_t * srz );
 int serializer_append( serializer_t *srz, const char* data, int len );
 int serializer_insert( serializer_t *srz, const uint32_t start_idx, const char* data, int len );
 int serializer_remove( serializer_t *srz, const uint32_t start_idx, char* data, int len );

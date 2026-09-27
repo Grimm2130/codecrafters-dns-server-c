@@ -1,6 +1,7 @@
 #include "dns_server.h"
 #include "dns_hdr.h"
 #include "dns_question.h"
+#include "dns_answer.h"
 #include "server_handle.h"
 #include "utils.h"
 #include "client_msg.h"
@@ -28,6 +29,7 @@ static void dequeue_client_message(client_msg_t *msg);
 static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_hdr(char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_question(char *rply_buf, const uint32_t size);
+static uint32_t dns_reply_serialize_answer(char *rply_buf, const uint32_t size);
 
 static void *dns_receiver_routine(void *arg)
 {
@@ -200,6 +202,7 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
     offset += dns_reply_serialize_question(rply_buf + offset, size - offset );
 
     // Construct DNS Answer
+    offset += dns_reply_serialize_answer( rply_buf + offset, size - offset );
 
     // Construct DNS Authority
 
@@ -221,7 +224,7 @@ static uint32_t dns_reply_serialize_hdr(char *rply_buf, const uint32_t size)
         .rz = 0,
         .rcode = 0,
         .qd_count = 1,
-        .an_count = 0,
+        .an_count = 1,
         .ns_count = 0,
         .ar_count = 0};
 
@@ -239,4 +242,17 @@ static uint32_t dns_reply_serialize_question(char *rply_buf, const uint32_t size
     dns_question_init_as_domain_name( &question, domain_name, domain_name_len );
 
     return  dns_question_serialize( &question, rply_buf, size );
+}
+
+static uint32_t dns_reply_serialize_answer(char *rply_buf, const uint32_t size)
+{
+    const char * domain_name = "codecrafters.io";
+    const size_t domain_name_len = strlen(domain_name);
+    const char * desc = "8.8.8.8";
+    const size_t desc_len = strlen(desc);
+
+    dns_answer_t answer;
+    dns_answer_init_from_domain_name_with_desc( &answer, domain_name, domain_name_len, 60, desc, size );
+
+    return dns_answer_serialize( &answer, rply_buf, size );
 }

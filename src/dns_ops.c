@@ -1,8 +1,10 @@
 #include "dns_hdr.h"
-#include "dns_question.h"
 #include "dns_label.h"
+#include "dns_common.h"
+#include "dns_question.h"
 #include "dns_rr_types.h"
 #include "dns_rr_classes.h"
+#include "dns_answer.h"
 #include "network_serializer.h"
 #include "utils.h"
 #include <string.h>
@@ -64,20 +66,20 @@ uint32_t dns_hdr_deserialize(dns_hdr_t *hdr, const char *in_buf, const uint32_t 
     // ID
     net_serializer_remove_u16(&serializer, 0, &temp, 1);
     hdr->id = temp;
-    
+
     // Flags
     net_serializer_remove_u16(&serializer, 0, &temp, 1);
     DNS_HDR_FLAG_FROM_U16(hdr, temp);
-    
+
     net_serializer_remove_u16(&serializer, 0, &temp, 1);
     hdr->qd_count = temp;
-    
+
     net_serializer_remove_u16(&serializer, 0, &temp, 1);
     hdr->an_count = temp;
-   
+
     net_serializer_remove_u16(&serializer, 0, &temp, 1);
     hdr->ns_count = temp;
-   
+
     net_serializer_remove_u16(&serializer, 0, &temp, 1);
     hdr->ar_count = temp;
 
@@ -115,11 +117,11 @@ uint32_t dns_label_serialize(dns_label_t *label, char *out_buf, const uint8_t si
     net_serializer_append_raw(&serializer, (const char *)(&label->content[0]), label->len);
 
     // Copy serialized content to buffer
-    net_serializer_copy_raw(&serializer, 0, out_buf, (sizeof( label->len ) + label->len) );
-    
+    net_serializer_copy_raw(&serializer, 0, out_buf, (sizeof(label->len) + label->len));
+
     net_serializer_deinit(&serializer);
 
-    return sizeof( label->len ) + label->len;
+    return sizeof(label->len) + label->len;
 }
 
 uint32_t dns_label_deserialize(dns_label_t *label, const char *in_buf, const uint8_t size)
@@ -133,10 +135,10 @@ uint32_t dns_label_deserialize(dns_label_t *label, const char *in_buf, const uin
     // Copy len
     net_serializer_remove_u8(&serializer, 0, &label->len, 1);
     net_serializer_remove_raw(&serializer, 0, (char *)(&label->content), label->len);
-    
+
     net_serializer_deinit(&serializer);
 
-    return sizeof( label->len ) + label->len;
+    return sizeof(label->len) + label->len;
 }
 
 /*
@@ -147,7 +149,7 @@ static void dns_question_init(dns_question_t *query)
 {
     query->label_cnt = query->qtype = query->qclass = 0;
 
-    for (uint8_t i = 0; i < DNS_QUESTION_LABEL_COUNT; i++)
+    for (uint8_t i = 0; i < DNS_MAX_LABEL_COUNT; i++)
     {
         query->qname[i].len = 0;
         query->qname[i].content[0] = '\0';
@@ -174,7 +176,7 @@ void dns_question_init_as_domain_name(dns_question_t *query, const char *domain_
     {
         // Update the label
         dns_label_init(&(query->qname[query->label_cnt++]), token, strlen(token));
-    } while ((query->label_cnt < DNS_QUESTION_LABEL_COUNT) && (token = strtok(NULL, ".")));
+    } while ((query->label_cnt < DNS_MAX_LABEL_COUNT) && (token = strtok(NULL, ".")));
 
     free(cpyBuf);
 }
@@ -184,13 +186,13 @@ uint32_t dns_question_serialize(dns_question_t *query, char *out_buf, const uint
     uint32_t offset = 0;
     net_serializer_t serializer;
     net_serializer_init(&serializer);
-    
+
     // Serialize the labels
     for (uint8_t i = 0; i < query->label_cnt; i++)
     {
         offset += dns_label_serialize(&(query->qname[i]), out_buf + offset, size - offset);
     }
-    
+
     // terminate qname
     out_buf[offset++] = '\0';
 
@@ -199,7 +201,7 @@ uint32_t dns_question_serialize(dns_question_t *query, char *out_buf, const uint
     net_serializer_append_u16(&serializer, &query->qclass, 1);
 
     // Insert serialized content into buffer
-    net_serializer_remove_raw(&serializer, 0, (char *)(out_buf + offset), 2 * sizeof(uint16_t));
+    net_serializer_remove_raw(&serializer, 0, (char *)(out_buf + offset), net_serializer_get_size( &serializer ));
 
     net_serializer_deinit(&serializer);
 
@@ -228,6 +230,141 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
         net_serializer_append_raw(&serializer, in_buf + offset, size - offset);
         net_serializer_remove_u16(&serializer, 0, &query->qtype, 1);
         net_serializer_remove_u16(&serializer, 0, &query->qclass, 1);
+        offset += 2 * sizeof(uint16_t);
+
+    }
+
+    net_serializer_deinit(&serializer);
+
+    return offset;
+}
+
+/*
+ *	================================== DNS ANSWER ==================================
+ */
+
+static void dns_answer_init(dns_answer_t *answer)
+{
+    answer->ttl = 0;
+    answer->label_cnt = answer->type = answer->_class = answer->rdlength = 0;
+    
+    for (uint8_t i = 0; i < DNS_MAX_LABEL_COUNT; i++)
+    {
+        answer->name[i].len = 0;
+        answer->name[i].content[0] = '\0';
+    }
+
+    memset(answer->rddata, 0, UINT16_MAX );
+}
+
+void dns_answer_init_domain_name_no_desc(dns_answer_t *answer, const uint32_t ttl, const char* domain_name, const uint32_t domain_name_len )
+{
+    char *token;
+
+    // initialize the query object
+    dns_answer_init(answer);
+
+    // Set time to live
+    answer->ttl = ttl;
+
+    // Set the Domain type and class
+    answer->type = (uint16_t)DNS_RR_TYPE__A;
+    answer->_class = (uint16_t)DNS_RR_CLASS__IN;
+
+    char *cpyBuf = calloc(domain_name_len + 1, sizeof(char));
+
+    memcpy(cpyBuf, domain_name, domain_name_len);
+
+    token = strtok(cpyBuf, ".");
+    do
+    {
+        // Update the label
+        dns_label_init(&(answer->name[answer->label_cnt++]), token, strlen(token));
+    } while ((answer->label_cnt < DNS_MAX_LABEL_COUNT) && (token = strtok(NULL, ".")));
+
+    free(cpyBuf);
+}
+
+
+void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char* domain_name, const uint32_t domain_name_len, const uint32_t ttl, const char *description, const uint16_t size)
+{
+    
+    dns_answer_init_domain_name_no_desc( answer, ttl, domain_name, domain_name_len );
+    // Copy answer specific information
+    answer->ttl = ttl;
+    answer->rdlength = size;
+    memcpy( answer->rddata, description, size );
+}
+
+void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t size )
+{
+    answer->rdlength = size;
+    memcpy( answer->rddata, description, size );
+}
+
+uint32_t dns_answer_serialize(dns_answer_t *answer, char *out_buf, const uint8_t size)
+{
+    uint32_t offset = 0;
+    net_serializer_t serializer;
+    net_serializer_init(&serializer);
+
+    // Serialize the labels
+    for (uint8_t i = 0; i < answer->label_cnt; i++)
+    {
+        offset += dns_label_serialize(&(answer->name[i]), out_buf + offset, size - offset);
+    }
+
+    // terminate qname
+    out_buf[offset++] = '\0';
+
+    // insert the type and class into serializer
+    net_serializer_append_u16(&serializer, &answer->type, 1);
+    net_serializer_append_u16(&serializer, &answer->_class, 1);
+
+    // insert the ttl
+    net_serializer_append_u32(&serializer, &answer->ttl, 1 );
+    
+    // insert the rdlength
+    net_serializer_append_u16(&serializer, &answer->rdlength, 1 );
+    
+    // insert the rddata
+    net_serializer_append_raw(&serializer, answer->rddata, answer->rdlength );
+
+    // Insert serialized content into buffer
+    net_serializer_remove_raw(&serializer, 0, (char *)(out_buf + offset), net_serializer_get_size( &serializer ) );
+    
+    net_serializer_deinit(&serializer);
+
+    return offset + (3 * sizeof(uint16_t)) + sizeof(uint32_t) + answer->rdlength;
+
+}
+
+uint32_t dns_answer_deserialize(dns_answer_t *answer, const char *in_buf, const uint8_t size)
+{
+    net_serializer_t serializer;
+    uint8_t label_idx = 0;
+    uint32_t offset = 0;
+    uint32_t label_end_idx = size - (2 * sizeof(uint16_t));
+
+    net_serializer_init(&serializer);
+
+    // deserialize the labels
+    while ((offset < label_end_idx) || (label_idx < answer->label_cnt))
+    {
+        offset += dns_label_deserialize(&answer->name[label_idx++], in_buf + offset, size - offset);
+    }
+
+    // deserialize the type and class
+    if (offset == label_end_idx)
+    {
+        offset++; // Skip null character
+        net_serializer_append_raw(&serializer, in_buf + offset, size - offset);
+        net_serializer_remove_u16(&serializer, 0, &answer->type, 1);
+        net_serializer_remove_u16(&serializer, 0, &answer->_class, 1);
+        net_serializer_remove_u32(&serializer, 0, &answer->ttl, 1);
+        net_serializer_remove_u16(&serializer, 0, &answer->rdlength, 1);
+        net_serializer_remove_raw(&serializer, 0, answer->rddata, answer->rdlength);
+        offset += (3 * sizeof(uint16_t)) + sizeof(uint32_t) + answer->rdlength;
     }
 
     net_serializer_deinit(&serializer);

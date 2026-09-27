@@ -23,6 +23,11 @@ void serializer_init( serializer_t *srz )
     srz->buf = calloc( SERIALIZER_DEFAULT_CAPACITY, sizeof(uint8_t));
 }
 
+uint32_t serializer_get_size( serializer_t * srz )
+{
+    return srz->size;
+}
+
 int serializer_append( serializer_t *srz, const char* data, int len )
 {
     int ret = 1;

@@ -19,6 +19,11 @@ void net_serializer_init( net_serializer_t* srz )
     srz->endianess = machine_endianness_type();
 }
 
+uint32_t net_serializer_get_size( net_serializer_t * srz )
+{
+    return serializer_get_size( srz->_srz );
+}
+
 int net_serializer_append_u8( net_serializer_t* srz, const uint8_t *data, const uint32_t len )
 {
     uint8_t data_end_aware;

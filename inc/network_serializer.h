@@ -16,6 +16,8 @@ typedef struct net_serializer
 net_serializer_t* net_serializer_create( );
 void net_serializer_init( net_serializer_t* srz );
 
+uint32_t net_serializer_get_size( net_serializer_t * srz );
+
 int net_serializer_append_u8( net_serializer_t* srz, const uint8_t *data, const uint32_t len );
 int net_serializer_append_u16( net_serializer_t* srz, const uint16_t *data, const uint32_t len );
 int net_serializer_append_u32( net_serializer_t* srz, const uint32_t *data, const uint32_t len );
