@@ -220,7 +220,7 @@ static uint32_t dns_reply_serialize_hdr(char *rply_buf, const uint32_t size)
         .ra = 0,
         .rz = 0,
         .rcode = 0,
-        .qd_count = 0,
+        .qd_count = 1,
         .an_count = 0,
         .ns_count = 0,
         .ar_count = 0};
