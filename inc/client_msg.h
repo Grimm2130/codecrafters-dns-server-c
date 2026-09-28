@@ -4,7 +4,7 @@
 #include "network_context.h"
 #include "memory.h"
 
-#define CLIENT_DATA_SIZE 1024
+#define CLIENT_DATA_SIZE 4096
 
 typedef struct client_msg
 {

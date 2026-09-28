@@ -81,6 +81,9 @@ static void *dns_transmitter_routine(void *arg)
 
         bytes = server_handle_send(srv_hndl, &to_transmit);
 
+        printf("Transmitted\n");
+        fflush(stdout);
+
         printf("Done\n");
 
         if (bytes > 0)
@@ -246,13 +249,13 @@ static uint32_t dns_reply_serialize_question(char *rply_buf, const uint32_t size
 
 static uint32_t dns_reply_serialize_answer(char *rply_buf, const uint32_t size)
 {
+    dns_answer_t answer;
     const char * domain_name = "codecrafters.io";
     const size_t domain_name_len = strlen(domain_name);
     const char * desc = "8.8.8.8";
     const size_t desc_len = strlen(desc);
 
-    dns_answer_t answer;
-    dns_answer_init_from_domain_name_with_desc( &answer, domain_name, domain_name_len, 60, desc, size );
+    dns_answer_init_from_domain_name_with_desc( &answer, domain_name, domain_name_len, 60, desc, desc_len );
 
     return dns_answer_serialize( &answer, rply_buf, size );
 }

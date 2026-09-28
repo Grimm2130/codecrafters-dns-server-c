@@ -286,20 +286,21 @@ void dns_answer_init_domain_name_no_desc(dns_answer_t *answer, const uint32_t tt
 }
 
 
-void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char* domain_name, const uint32_t domain_name_len, const uint32_t ttl, const char *description, const uint16_t size)
+void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char* domain_name, const uint32_t domain_name_len, const uint32_t ttl, const char *description, const uint16_t description_len)
 {
     
     dns_answer_init_domain_name_no_desc( answer, ttl, domain_name, domain_name_len );
+    
     // Copy answer specific information
     answer->ttl = ttl;
-    answer->rdlength = size;
-    memcpy( answer->rddata, description, size );
+    answer->rdlength = description_len;
+    memcpy( answer->rddata, description, description_len );
 }
 
-void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t size )
+void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t description_len )
 {
-    answer->rdlength = size;
-    memcpy( answer->rddata, description, size );
+    answer->rdlength = description_len;
+    memcpy( answer->rddata, description, description_len );
 }
 
 uint32_t dns_answer_serialize(dns_answer_t *answer, char *out_buf, const uint8_t size)
@@ -320,7 +321,7 @@ uint32_t dns_answer_serialize(dns_answer_t *answer, char *out_buf, const uint8_t
     // insert the type and class into serializer
     net_serializer_append_u16(&serializer, &answer->type, 1);
     net_serializer_append_u16(&serializer, &answer->_class, 1);
-
+    
     // insert the ttl
     net_serializer_append_u32(&serializer, &answer->ttl, 1 );
     
@@ -329,14 +330,15 @@ uint32_t dns_answer_serialize(dns_answer_t *answer, char *out_buf, const uint8_t
     
     // insert the rddata
     net_serializer_append_raw(&serializer, answer->rddata, answer->rdlength );
-
+    
     // Insert serialized content into buffer
     net_serializer_remove_raw(&serializer, 0, (char *)(out_buf + offset), net_serializer_get_size( &serializer ) );
     
+    offset += (2 * sizeof(uint16_t)) + (sizeof(uint32_t)) + (sizeof(uint16_t)) + (answer->rdlength);
+    
     net_serializer_deinit(&serializer);
 
-    return offset + (3 * sizeof(uint16_t)) + sizeof(uint32_t) + answer->rdlength;
-
+    return offset;
 }
 
 uint32_t dns_answer_deserialize(dns_answer_t *answer, const char *in_buf, const uint8_t size)

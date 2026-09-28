@@ -3,7 +3,7 @@
 #include <memory.h>
 #include <stdio.h>
 
-#define SERIALIZER_DEFAULT_CAPACITY 1048576U
+#define SERIALIZER_DEFAULT_CAPACITY 0x2000
 
 #define SERIALIZER_AVAILABLE_SIZE(srz_ptr)      ( ((srz_ptr)->cap - (srz_ptr)->size) )
 

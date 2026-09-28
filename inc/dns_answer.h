@@ -18,8 +18,8 @@ typedef struct dns_answer
 } dns_answer_t;
 
 void dns_answer_init_domain_name_no_desc(dns_answer_t *answer, const uint32_t ttl, const char* domain_name, const uint32_t domain_name_len );
-void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char* domain_name, const uint32_t domain_name_len, const uint32_t ttl, const char *description, const uint16_t size);
-void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t size );
+void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char* domain_name, const uint32_t domain_name_len, const uint32_t ttl, const char *description, const uint16_t description_len);
+void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t description_len );
 uint32_t dns_answer_serialize(dns_answer_t *answer, char *out_buf, const uint8_t size);
 uint32_t dns_answer_deserialize(dns_answer_t *answer, const char *in_buf, const uint8_t size);
 
