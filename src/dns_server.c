@@ -233,6 +233,9 @@ static uint32_t dns_reply_serialize_hdr(char *rply_buf, const uint32_t size)
 
     // copy header info
     memset(rply_buf, 0, DSN_HDR_SIZE);
+
+    printf("Serialized Header: %s\n", dns_hdr_str(&hdr));
+
     return dns_hdr_serialize(&hdr, rply_buf, size);
 }
 
@@ -244,6 +247,8 @@ static uint32_t dns_reply_serialize_question(char *rply_buf, const uint32_t size
     dns_question_t question;
     dns_question_init_as_domain_name( &question, domain_name, domain_name_len );
 
+    printf("Serialized Question: %s\n", dns_question_str(&question));
+
     return  dns_question_serialize( &question, rply_buf, size );
 }
 
@@ -252,10 +257,12 @@ static uint32_t dns_reply_serialize_answer(char *rply_buf, const uint32_t size)
     dns_answer_t answer;
     const char * domain_name = "codecrafters.io";
     const size_t domain_name_len = strlen(domain_name);
-    const char * desc = "8.8.8.8";
-    const size_t desc_len = strlen(desc);
+    uint32_t desc = htonl(ip_str_to_n("8.8.8.8"));
+    const size_t desc_len = sizeof(uint32_t);
 
-    dns_answer_init_from_domain_name_with_desc( &answer, domain_name, domain_name_len, 60, desc, desc_len );
+    dns_answer_init_from_domain_name_with_desc( &answer, domain_name, domain_name_len, 60, (const char*)&desc, desc_len );
+
+    printf("Serialized Answer: %s\n", dns_answer_str(&answer));
 
     return dns_answer_serialize( &answer, rply_buf, size );
 }

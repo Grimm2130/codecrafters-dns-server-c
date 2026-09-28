@@ -88,6 +88,29 @@ uint32_t dns_hdr_deserialize(dns_hdr_t *hdr, const char *in_buf, const uint32_t 
     return DSN_HDR_SIZE;
 }
 
+const char * dns_hdr_str( dns_hdr_t* hdr )
+{
+    static char buf[255];
+
+    snprintf(buf, 255, "DNS-HDR{id: %u, qr: %u, opcode: %u, aa: %u, tc: %u, rd: %u, ra: %u, rz: %u, rcode: %u, qd_count: %u, an_count: %u, ns_count: %u, ar_count: %u}",
+        hdr->id,
+        hdr->qr,
+        hdr->opcode,
+        hdr->aa,
+        hdr->tc,
+        hdr->rd,
+        hdr->ra,
+        hdr->rz,
+        hdr->rcode,
+        hdr->qd_count,
+        hdr->an_count,
+        hdr->ns_count,
+        hdr->ar_count
+    );
+
+    return buf;
+}
+
 /*
  *	================================== DNS LABEL ==================================
  */
@@ -139,6 +162,17 @@ uint32_t dns_label_deserialize(dns_label_t *label, const char *in_buf, const uin
     net_serializer_deinit(&serializer);
 
     return sizeof(label->len) + label->len;
+}
+
+const char* dns_label_str( dns_label_t* label )
+{
+    static char buf[255];
+    static char temp[64];
+    memcpy( temp, label->content, label->len );
+    temp[label->len] = '\0';
+
+    snprintf( buf, 255, "Label {len: %u, content: %s}", label->len, temp );
+    return buf;
 }
 
 /*
@@ -239,6 +273,24 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
     return offset;
 }
 
+const char *dns_question_str( dns_question_t* query )
+{
+    int len = 0;
+    #define     DNS_QUESTION_STR_SIZE   2048U
+    static char buf[DNS_QUESTION_STR_SIZE];
+
+    len += snprintf(buf + len, DNS_QUESTION_STR_SIZE - len, "Header { names: {\n" );
+
+    for( int i = 0; i < query->label_cnt; i++ )
+    {
+        len += snprintf( buf + len, DNS_QUESTION_STR_SIZE - len, "\t#%d %s,\n", i, dns_label_str( &(query->qname[i]) ) );
+    }
+
+    len += snprintf( buf + len, DNS_QUESTION_STR_SIZE - len, "},\n type:%u, class: %u", query->qtype, query->qclass );
+
+    return  buf;
+}
+
 /*
  *	================================== DNS ANSWER ==================================
  */
@@ -290,11 +342,10 @@ void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char
 {
     
     dns_answer_init_domain_name_no_desc( answer, ttl, domain_name, domain_name_len );
-    
+
     // Copy answer specific information
     answer->ttl = ttl;
-    answer->rdlength = description_len;
-    memcpy( answer->rddata, description, description_len );
+    dns_answer_set_description( answer, description, description_len );
 }
 
 void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t description_len )
@@ -372,4 +423,31 @@ uint32_t dns_answer_deserialize(dns_answer_t *answer, const char *in_buf, const 
     net_serializer_deinit(&serializer);
 
     return offset;
+}
+
+const char * dns_answer_str( dns_answer_t* answer )
+{
+    int len = 0;
+    #define     DNS_ANSWER_STR_SIZE   2048U
+    static char buf[DNS_ANSWER_STR_SIZE];
+    static char temp[UINT16_MAX];
+
+    len += snprintf(buf + len, DNS_ANSWER_STR_SIZE - len, "Header { names: {\n" );
+
+    for( int i = 0; i < answer->label_cnt; i++ )
+    {
+        len += snprintf( buf + len, DNS_ANSWER_STR_SIZE - len, "\t#%d %s,\n", i, dns_label_str( &(answer->name[i]) ) );
+    }
+
+    memcpy( temp, answer->rddata, answer->rdlength );
+    temp[answer->rdlength] = '\0';
+
+    len += snprintf( buf + len, DNS_ANSWER_STR_SIZE - len, "},\n type:%u, class: %u, desc-len: %u desc: %s",
+        answer->type, 
+        answer->_class,
+        answer->rdlength,
+        temp
+    );
+
+    return  buf;
 }

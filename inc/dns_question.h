@@ -17,5 +17,6 @@ void dns_question_init_as_domain_name(dns_question_t *query, const char *domain_
 
 uint32_t dns_question_serialize(dns_question_t *query, char *out_buf, const uint32_t size);
 uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, const uint32_t size);
+const char *dns_question_str( dns_question_t* query );
 
 #endif // __DNS_QUESTION_H__

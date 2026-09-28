@@ -22,5 +22,6 @@ void dns_answer_init_from_domain_name_with_desc(dns_answer_t *answer, const char
 void dns_answer_set_description(dns_answer_t *answer, const char *description, const uint16_t description_len );
 uint32_t dns_answer_serialize(dns_answer_t *answer, char *out_buf, const uint8_t size);
 uint32_t dns_answer_deserialize(dns_answer_t *answer, const char *in_buf, const uint8_t size);
+const char * dns_answer_str( dns_answer_t* answer );
 
 #endif // __DNS_ANSWER_H__
