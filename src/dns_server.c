@@ -13,6 +13,7 @@
 #include "sync_cir_buffer.h"
 #include "network_serializer.h"
 #include "serializer.h"
+#include <assert.h>
 
 #define DNS_SECTION_BUFFER_SIZE   255U
 
@@ -22,7 +23,11 @@ task_t g_transmitter;
 udp_server_handle_t g_udp_server_handle;
 sync_cir_buffer_t g_transmit_buffer;
 net_serializer_t g_rxSerializer;
-net_serializer_t g_txSerializer;
+
+dns_hdr_t g_hdr;
+cir_buffer_t g_questions;
+cir_buffer_t g_answers;
+
 char g_dns_section_buffer[DNS_SECTION_BUFFER_SIZE];
 
 // dns_hdr_t g_header;
@@ -41,12 +46,12 @@ static void enqueue_client_message(const client_msg_t *msg);
 static void dequeue_client_message(client_msg_t *msg);
 
 static void dns_process_msg();
-static void dns_process_msg__dns_hdr( const dns_hdr_t* hdr );
-static void dns_process_msg__dns_hdr_valid( const dns_hdr_t* hdr );
-static void dns_process_msg__dns_hdr_valid_query( const dns_hdr_t* hdr );
-static void dns_process_msg__dns_hdr_valid_query_standard( const dns_hdr_t* hdr );
+static void dns_process_msg__dns_hdr( dns_hdr_t* hdr );
+static void dns_process_msg__dns_hdr_valid( dns_hdr_t* hdr );
+static void dns_process_msg__dns_hdr_valid_query( dns_hdr_t* hdr );
+static void dns_process_msg__dns_hdr_valid_query_standard( dns_hdr_t* hdr );
 
-static void dns_process_msg__dns_hdr_questions( const dns_hdr_t* hdr );
+static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr );
 static void dns_process_msg__dns_question( const dns_question_t* question, dns_answer_t* answer );
 static void dns_process_msg__dns_question_host_addr( const dns_question_t* question, dns_answer_t* answer );
 static void dns_process_msg__dns_question_host_addr_internet( const dns_question_t* question, dns_answer_t* answer );
@@ -105,8 +110,12 @@ static void *dns_transmitter_routine(void *arg)
         dequeue_client_message(&to_transmit);
         ip_n_to_str(htonl(to_transmit.context.addr.sin_addr.s_addr), ip, 20);
 
-        printf(">>> Transmitting [%d] bytes to %s:%u -> ", to_transmit.len, ip, htons(to_transmit.context.addr.sin_port));
-        print_msg((uint8_t *)(&to_transmit.data), to_transmit.len);
+        printf(">>> Transmitting [%d] bytes to %s:%u {%s}\n", 
+            to_transmit.len, 
+            ip, 
+            htons(to_transmit.context.addr.sin_port),
+            client_msg_str(&to_transmit)
+        );
 
         bytes = udp_server_handle_send(srv_hndl, &to_transmit);
 
@@ -133,7 +142,10 @@ void dns_service_start()
 {
     // Initialize dns message serializers
     net_serializer_init(&g_rxSerializer);
-    net_serializer_init(&g_txSerializer);
+
+    // initialize the questions and answers buffers
+    cir_buffer_init( &g_questions, false );
+    cir_buffer_init( &g_answers, false );
 
     // initialize transmit buffer
     sync_cir_buffer_init(&g_transmit_buffer, false);
@@ -144,19 +156,23 @@ void dns_service_start()
         .prio = 10,
         .stack_size = 1e6,
         .arg = (void *)(&g_udp_server_handle),
-        .fn = dns_receiver_routine};
+        .fn = dns_receiver_routine
+    };
+
     task_params_t transmitter_task_param = {
         .can_join = true,
         .prio = 10,
         .stack_size = 1e6,
         .arg = (void *)(&g_udp_server_handle),
-        .fn = dns_transmitter_routine};
+        .fn = dns_transmitter_routine
+    };
 
     // initialize serve_handle params
     udp_server_handle_params_t udp_server_handle_param = {
         .client_allow_mask = (uint32_t)(-1),
         .port = DNS_PORT,
-        .rcv_to = (uint32_t)1e6};
+        .rcv_to = (uint32_t)1e6
+    };
 
     udp_server_handle_init(&g_udp_server_handle, &udp_server_handle_param);
 
@@ -179,6 +195,7 @@ void dns_service_start()
 
         sleep(3);
     }
+
 }
 
 void dns_service_stop()
@@ -190,17 +207,27 @@ void dns_service_stop()
 
 static void dns_handle_new_client_data(client_msg_t *msg)
 {
-    char ip[20];
+    uint16_t client_port;
+    char client_ip_addr[20];
     client_msg_t response;
     
-    ip_n_to_str(ntohl(msg->context.addr.sin_addr.s_addr), ip, 20);
-    printf(">>> Received [%d] bytes from %s:%u -> ", msg->len, ip, ntohs(msg->context.addr.sin_port));
-    print_msg((uint8_t *)msg->data, msg->len);
+    ip_n_to_str(ntohl(msg->context.addr.sin_addr.s_addr), client_ip_addr, 20);
+    client_port = ntohs(msg->context.addr.sin_port);
+
+    printf(">>> Received [%d] bytes from %s:%u {%s}\n", 
+        msg->len, 
+        client_ip_addr, 
+        client_port,
+        client_msg_str(msg)
+    );
 
     // Copy the message context information
     memcpy( &(response.context), &(msg->context), sizeof(msg->context) );
     
-    // serialize the message
+    // Clear the receiver serializer
+    net_serializer_clear(&g_rxSerializer);
+
+    // Copy the message into the serializer
     net_serializer_append_raw( &g_rxSerializer, msg->data, msg->len );
 
     // process the message
@@ -231,27 +258,37 @@ static void dequeue_client_message(client_msg_t *msg)
     sync_cir_buffer_read(&g_transmit_buffer, (char *)msg, CLIENT_MSG_SIZE, false);
 }
 
+/// @brief Process the DNS message that's been received
 static void dns_process_msg()
 {
-    dns_hdr_t received_hdr;
+    uint32_t bytes;
 
-    if( net_serializer_remove_raw( &g_rxSerializer, 0, g_dns_section_buffer, DNS_SECTION_BUFFER_SIZE ) == 0 )
-    {
-        uint32_t bytes = dns_hdr_deserialize( &received_hdr, g_dns_section_buffer, DNS_SECTION_BUFFER_SIZE );
+    bytes = dns_hdr_deserialize( 
+        &g_hdr,
+        net_serializer_getbuf( &g_rxSerializer),
+        net_serializer_get_size( &g_rxSerializer)
+    );
     
-        if( bytes == DSN_HDR_SIZE )
-        {
-            dns_process_msg__dns_hdr( &received_hdr );
-        }
+    // Copy validate the header data deserialized
+    if( bytes == DSN_HDR_SIZE )
+    {
+        printf("[Request] Header %s\n", dns_hdr_str( &g_hdr ) );
+
+        // remove raw data from the serializer
+        net_serializer_remove_raw( &g_rxSerializer, 0, NULL, DSN_HDR_SIZE );
+        
+        // process the header
+        dns_process_msg__dns_hdr( &g_hdr );
     }
     else
     {
         // ! Error
     }
-
 }
 
-static void dns_process_msg__dns_hdr( const dns_hdr_t* hdr )
+/// @brief Process the DNS header received
+/// @param hdr 
+static void dns_process_msg__dns_hdr( dns_hdr_t* hdr )
 {
     // Check the response code
     switch( (DNS_HEADER_RCODE)hdr->rcode )
@@ -301,7 +338,9 @@ static void dns_process_msg__dns_hdr( const dns_hdr_t* hdr )
     
 }
 
-static void dns_process_msg__dns_hdr_valid( const dns_hdr_t* hdr )
+/// @brief Handle a valid DNS header object
+/// @param hdr 
+static void dns_process_msg__dns_hdr_valid( dns_hdr_t* hdr )
 {
     switch ((DNS_HEADER_TYPE)hdr->qr)
     {
@@ -312,20 +351,17 @@ static void dns_process_msg__dns_hdr_valid( const dns_hdr_t* hdr )
         break;
         
         case DNS_HEADER_TYPE__RESPONSE:
-        {
-
-        }
-        break;
-        
         default:
         {
-
+            printf("[ERROR] Unhandled header type\n");
         }
         break;
     }
 }
 
-static void dns_process_msg__dns_hdr_valid_query( const dns_hdr_t* hdr )
+/// @brief Handle a valid DNS query
+/// @param hdr 
+static void dns_process_msg__dns_hdr_valid_query( dns_hdr_t* hdr )
 {
     switch ((DNS_HEADER_OPCODE)hdr->opcode)
     {
@@ -336,43 +372,39 @@ static void dns_process_msg__dns_hdr_valid_query( const dns_hdr_t* hdr )
         break;
 
         case DNS_HEADER_OPCODE__INVERSE_QUERY:
-        {
-
-        }
-        break;
-
         case DNS_HEADER_OPCODE__SERVER_STATUS_REQUEST:
-        {
-
-        }
-        break;
-
         default:
         {
-
+            printf("[ERROR] Unhandled header opcode\n");
         }
         break;
     }
 }
 
-static void dns_process_msg__dns_hdr_valid_query_standard( const dns_hdr_t* hdr )
+/// @brief Handle a Standard DNS query
+/// @param hdr 
+static void dns_process_msg__dns_hdr_valid_query_standard( dns_hdr_t* hdr )
 {
     // process questions
     if(hdr->qd_count)
     {
         dns_process_msg__dns_hdr_questions(hdr);
     }
+    else
+    {
+        // ? What to do
+    }
 }
 
-static void dns_process_msg__dns_hdr_questions( const dns_hdr_t* hdr )
+/// @brief Process DNS header questions
+/// @param hdr 
+static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
 {
     uint32_t bytes;
     dns_answer_t answer;
     dns_question_t question;
-    
-    cir_buffer_t answers;
-    cir_buffer_init( &answers, false );
 
+    // Process all the questions
     for( uint16_t qIdx = 0; qIdx < hdr->qd_count; qIdx++ )
     {
         // extract the current question from the serializer
@@ -384,47 +416,36 @@ static void dns_process_msg__dns_hdr_questions( const dns_hdr_t* hdr )
 
         if( bytes )
         {
+            printf("[Request] Question %s\n", dns_question_str(&question) );
+
+            cir_buffer_write( &g_questions, (const char*)&question, sizeof(dns_question_t)) ;
+
             // remove question from receive buffer
-            net_serializer_remove_raw( &g_rxSerializer, 0, NULL, bytes );
-    
-            // insert the question into the section buffer
-            if( dns_question_serialize( &question, g_dns_section_buffer, DNS_SECTION_BUFFER_SIZE ) == bytes )
+            if(net_serializer_remove_raw( &g_rxSerializer, 0, NULL, bytes ) == 0 )
             {
-                net_serializer_append_raw( &g_txSerializer, g_dns_section_buffer, bytes );
-                
-                // process the questioun
-                dns_process_msg__dns_question(  &question, &answer );
-                cir_buffer_write( &answers, (const char*)&answer, sizeof(dns_answer_t) );
+                // process the question and generate answer
+                dns_process_msg__dns_question( &question, &answer );
+
+                // Append the answer to the question response block
+                cir_buffer_write( &g_answers, (const char*)&answer, sizeof(dns_answer_t) );
             }
             else
             {
                 // ! ERROR
             }
+    
         }
         else
         {
             // ! ERROR
         }
     }
-
-    // Copy serialize cir
-    while( cir_buffer_is_empty( &answers) == false )
-    {
-        cir_buffer_read( &answers, (char*)&answer, sizeof(dns_answer_t) );
-
-        // Serialize
-        bytes = dns_answer_serialize( &answer, g_dns_section_buffer, DNS_SECTION_BUFFER_SIZE );
-
-        // Copy into reply serializer
-        net_serializer_append_raw( &g_txSerializer, g_dns_section_buffer, bytes );
-    }
-
-    // Cleanup the circular buffer
-    cir_buffer_deinit( &answers );
 }
 
 static void dns_process_msg__dns_question( const dns_question_t* question, dns_answer_t* answer )
 {
+    printf("Processing Quesstion...\n");
+
     switch((DNS_RR_TYPE)question->qtype)
     {
         case DNS_RR_TYPE__A:
@@ -448,6 +469,7 @@ static void dns_process_msg__dns_question( const dns_question_t* question, dns_a
         case DNS_RR_TYPE__MX:
         case DNS_RR_TYPE__TXT:
         default:
+            printf("[INFO] unknown QUESTION type received\n");
         break;
     }
 }
@@ -462,6 +484,9 @@ static void dns_process_msg__dns_question_host_addr( const dns_question_t* quest
         }
         break;
 
+        case DNS_RR_CLASS__CS:
+        case DNS_RR_CLASS__CH:
+        case DNS_RR_CLASS__HS:
         default:
         break;
     }
@@ -471,36 +496,23 @@ static void dns_process_msg__dns_question_host_addr_internet( const dns_question
 {
     uint32_t offset = 0;
     char domain_name[255];
-    memset(domain_name, 0, sizeof(domain_name)/sizeof(domain_name[0]) );
+    const size_t domain_name_size = sizeof(domain_name)/sizeof(domain_name[0]);
+    memset(domain_name, 0, domain_name_size );
 
-    // extract the domain name
-    for( uint8_t i = 0; i < DNS_MAX_LABEL_COUNT; i++ )   
-    {
-        if( question->qname[i].content[0] == '\0' )
-        {
-            // terminate string
-            domain_name[--offset] = '\0';
-            break;
-        }
+    offset += dns_question_get_qname_as_domain_name( question, domain_name, domain_name_size );
 
-        memcpy( domain_name + offset, question->qname[0].content, question->qname[0].len );
-        offset += question->qname[0].len;
-        domain_name[offset++] = '.';
-    }
-
-    // lookup domain name domain name to address
+    // lookup IP address from domain name
     const char *ip_addr = dns_get_ip_from_domain(domain_name);
 
-    dns_process_msg__answer_host_addr_internet( answer, domain_name, ip_addr );
+    if( ip_addr )dns_process_msg__answer_host_addr_internet( answer, domain_name, ip_addr );
+    else printf("[ERROR] No ip address found for domain name - %s\n", domain_name );
 }
 
 static void dns_process_msg__answer_host_addr_internet( dns_answer_t* answer, const char *domain_name, const char* ip_addr )
 {
     const size_t domain_name_len = strlen(domain_name);
+    uint32_t desc = htonl(ip_str_to_n(ip_addr));
     const size_t desc_len = sizeof(uint32_t);
-
-    // convert ip to 32 bit int format
-    uint32_t desc = htonl(ip_str_to_n("8.8.8.8"));
 
     dns_answer_init_from_domain_name_with_desc( answer, domain_name, domain_name_len, 60, (const char*)&desc, desc_len );
 }
@@ -514,22 +526,45 @@ static void dns_process_msg__answer_host_addr_internet( dns_answer_t* answer, co
 
 static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
 {
-    uint32_t offset = 0;
+    uint32_t bytes = DSN_HDR_SIZE;        // offset for header
+    dns_question_t question;
+    dns_answer_t answer;
 
-    // // Construct DNS header
-    // offset += dns_reply_serialize_hdr(rply_buf + offset, size - offset);
+    printf("Serializing Response...\n");
 
-    // // Construct DNS Question
-    // offset += dns_reply_serialize_question(rply_buf + offset, size - offset);
+    memset(g_dns_section_buffer, 0, DNS_SECTION_BUFFER_SIZE);
 
-    // // Construct DNS Answer
-    // offset += dns_reply_serialize_answer(rply_buf + offset, size - offset);
+    g_hdr.qd_count = 0;
+    
+    // serialize the questions
+    while( cir_buffer_is_empty( &g_questions) == false )
+    {
+        assert( cir_buffer_read( &g_questions, (char*)&question, sizeof(dns_question_t) ) == sizeof(dns_question_t) );
+        bytes += dns_question_serialize( &question, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes );
+        printf("[Response] Question %s\n", dns_question_str(&question));
+        g_hdr.qd_count++;
+    }
+    
+    g_hdr.an_count = 0;
+    // Serialize the answers
+    while( cir_buffer_is_empty( &g_answers) == false )
+    {
+        assert( cir_buffer_read( &g_answers, (char*)&answer, sizeof(dns_answer_t) ) == sizeof(dns_answer_t) );
+        bytes += dns_answer_serialize( &answer, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes );
+        printf("[Response] Answer %s\n", dns_answer_str(&answer));
+        g_hdr.an_count++;
+    }
 
-    // Construct DNS Authority
+    g_hdr.qr = 1;       // mark as response
 
-    // Construct DNS Additional
+    // insert the header at the front
+    dns_hdr_serialize( &g_hdr, g_dns_section_buffer, DSN_HDR_SIZE );
 
-    return offset;
+    printf("[Response] Header %s\n", dns_hdr_str( &g_hdr ));
+
+    memcpy(rply_buf, g_dns_section_buffer, bytes );
+
+    return bytes;
 }
 
 static uint32_t dns_reply_serialize_hdr(dns_hdr_t *hdr, char *rply_buf, const uint32_t size)

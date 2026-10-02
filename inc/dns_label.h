@@ -12,8 +12,8 @@ typedef struct dns_label
 } dns_label_t;
 
 void dns_label_init( dns_label_t* label, const char* content, const uint8_t len );
-uint32_t dns_label_serialize( dns_label_t* label, char* out_buf, const uint8_t size );
+uint32_t dns_label_serialize( const dns_label_t* label, char* out_buf, const uint8_t size );
 uint32_t dns_label_deserialize( dns_label_t* label, const char* in_buf, const uint8_t size );
-const char* dns_label_str( dns_label_t* label );
+const char* dns_label_str( const dns_label_t* label );
 
 #endif // __DNS_LABEL_H__

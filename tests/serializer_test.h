@@ -34,8 +34,10 @@ void run_test_serializer()
 {
     printf("Serializer tests running...\n");
     assert(test_serializer_initialize());
+    
     assert(test_serializer_append());
     assert(test_serializer_remove());
+
     assert(test_serializer_insert());
     assert(test_serializer_copy());
     assert(test_serializer_remove());

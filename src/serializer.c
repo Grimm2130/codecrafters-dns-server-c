@@ -3,7 +3,7 @@
 #include <memory.h>
 #include <stdio.h>
 
-#define SERIALIZER_DEFAULT_CAPACITY 0x2000
+#define SERIALIZER_DEFAULT_CAPACITY (1024U * 1024U)
 
 #define SERIALIZER_AVAILABLE_SIZE(srz_ptr)      ( ((srz_ptr)->cap - (srz_ptr)->size) )
 
@@ -118,7 +118,11 @@ void serializer_clear( serializer_t *srz )
 
 void serializer_deinit( serializer_t *srz )
 {
-    if( srz->buf ) free( srz->buf );
+    if( srz->buf )
+    {
+        free( srz->buf );
+        srz->buf = NULL;
+    }
     srz->size = srz->cap = 0;
 }
 

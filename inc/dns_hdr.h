@@ -70,6 +70,6 @@ typedef struct dns_hdr
 void dns_hdr_init(dns_hdr_t *hdr);
 uint32_t dns_hdr_serialize(dns_hdr_t *hdr, char *out_buf, const uint32_t size);
 uint32_t dns_hdr_deserialize(dns_hdr_t *hdr, const char *in_buf, const uint32_t size);
-const char * dns_hdr_str( dns_hdr_t* hdr );
+const char * dns_hdr_str( const dns_hdr_t* hdr );
 
 #endif // __DNS_HDR_H__
