@@ -9,4 +9,7 @@
 - [x] Test Serializer
 - [x] Review Bit operation relevant to implementations
 - [x] Test NetSerializer
+- [ ] Remove the label count from the dns deserializer functionality
+- [ ] Implement the DNS question deserializer function
+- [ ] Implement the DNS answer deserializer function,
 - [ ] Test Bit Ops

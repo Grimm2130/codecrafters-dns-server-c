@@ -3,7 +3,7 @@
 
 #include "dns_label.h"
 #include "dns_common.h"
-
+    
 /// @brief DNS Query/Question type
 typedef struct dns_question
 {

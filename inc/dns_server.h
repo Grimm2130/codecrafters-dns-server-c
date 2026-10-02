@@ -7,4 +7,7 @@
 void dns_service_start();
 void dns_service_stop();
 
+
+
+
 #endif // __DNS_H__

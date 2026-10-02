@@ -265,7 +265,6 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
         net_serializer_remove_u16(&serializer, 0, &query->qtype, 1);
         net_serializer_remove_u16(&serializer, 0, &query->qclass, 1);
         offset += 2 * sizeof(uint16_t);
-
     }
 
     net_serializer_deinit(&serializer);

@@ -66,8 +66,8 @@ int serializer_remove( serializer_t *srz, const uint32_t start_idx, char* data, 
     if( srz->size >= end_idx )
     {
         ret = 0;
-        // Copy data into buffer
-        memcpy( data, srz->buf + start_idx, len );
+        // Copy data into buffer if available
+        if( data ) memcpy( data, srz->buf + start_idx, len );
         // remove data from buffer
         memcpy( srz->buf + start_idx, srz->buf + end_idx, last_len );
         srz->size -= len;
