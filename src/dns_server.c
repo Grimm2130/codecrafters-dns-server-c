@@ -354,6 +354,7 @@ static void dns_process_msg__dns_hdr_valid( dns_hdr_t* hdr )
         default:
         {
             printf("[ERROR] Unhandled header type\n");
+            g_hdr.rcode = DNS_HEADER_RCODE__NOT_IMPLEMENTED;
         }
         break;
     }
@@ -376,6 +377,7 @@ static void dns_process_msg__dns_hdr_valid_query( dns_hdr_t* hdr )
         default:
         {
             printf("[ERROR] Unhandled header opcode\n");
+            g_hdr.rcode = DNS_HEADER_RCODE__NOT_IMPLEMENTED;
         }
         break;
     }
