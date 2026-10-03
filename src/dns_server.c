@@ -224,6 +224,9 @@ static void dns_handle_new_client_data(client_msg_t *msg)
     // Copy the message context information
     memcpy( &(response.context), &(msg->context), sizeof(msg->context) );
     
+    cir_buffer_clear( &g_questions ); 
+    cir_buffer_clear( &g_answers ); 
+
     // Clear the receiver serializer
     net_serializer_clear(&g_rxSerializer);
 
@@ -506,8 +509,15 @@ static void dns_process_msg__dns_question_host_addr_internet( const dns_question
     // lookup IP address from domain name
     const char *ip_addr = dns_get_ip_from_domain(domain_name);
 
-    if( ip_addr )dns_process_msg__answer_host_addr_internet( answer, domain_name, ip_addr );
-    else printf("[ERROR] No ip address found for domain name - %s\n", domain_name );
+    if( ip_addr )
+    {
+        dns_process_msg__answer_host_addr_internet( answer, domain_name, ip_addr );
+    }
+    else
+    {
+        printf("[ERROR] No ip address found for domain name - %s using default\n", domain_name );
+        dns_process_msg__answer_host_addr_internet( answer, domain_name, "8.8.8.8" );
+    }
 }
 
 static void dns_process_msg__answer_host_addr_internet( dns_answer_t* answer, const char *domain_name, const char* ip_addr )

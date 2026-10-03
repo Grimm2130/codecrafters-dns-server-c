@@ -106,6 +106,13 @@ int sync_cir_buffer_write(sync_cir_buffer_t *buf, const char *data, const uint32
     return res;
 }
 
+void sync_cir_buffer_clear(sync_cir_buffer_t * buf)
+{
+    LOCK(buf);
+    cir_buffer_clear(buf->_cbuf);
+    UNLOCK(buf);
+}
+
 void sync_cir_buffer_deinit(sync_cir_buffer_t *buf)
 {
     LOCK(buf);

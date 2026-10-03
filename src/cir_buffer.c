@@ -94,6 +94,13 @@ int cir_buffer_write(cir_buffer_t *cbuf, const char *buf, const uint32_t amnt)
     return amnt;
 }
 
+void cir_buffer_clear(cir_buffer_t *cbuf)
+{
+    cbuf->front = cbuf->rear = cbuf->size = 0;
+    
+    cir_buffer_deinit( cbuf );
+}
+
 void cir_buffer_deinit(cir_buffer_t *cbuf)
 {
     for (int i = 0; i < CIR_BUFFER_CAPACITY; i++)

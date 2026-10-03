@@ -1,7 +1,8 @@
 import socket
 import time
-from dataclasses import dataclass
 import struct
+from dataclasses import dataclass
+import random
 
 @dataclass
 class DNSHeader:
@@ -95,19 +96,34 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
 
     sock.settimeout(5)
 
-    while True:
-
-        message = DNSHeader(
+    messages = [
+        DNSHeader(
             id = 1234,
             qr = 0,
             qd_count=1
-        ).to_bytes()
-
-        message += DNSQuestion(
+        ).to_bytes() +
+        DNSQuestion(
             content="codecrafters.io",
             qtype=1,
             qclass=1
-        ).to_bytes()
+        ).to_bytes(),
+        
+        DNSHeader(
+            id = 1235,
+            qr = 0,
+            qd_count=1
+        ).to_bytes() +
+        DNSQuestion(
+            content="facebook.io",
+            qtype=1,
+            qclass=1
+        ).to_bytes(),
+
+    ]
+
+    while True:
+
+        message = messages[ random.choice([0,1])]
 
         print(f"Sending: {message} from {sock}")
         sock.sendto(message, (SERVER_IP, SERVER_PORT) )
