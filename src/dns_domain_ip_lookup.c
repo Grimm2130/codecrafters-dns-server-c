@@ -12,5 +12,5 @@ const char *dns_get_ip_from_domain(const char* domain)
         }
     }
 
-    return NULL;
+    return "8.8.8.8";
 }
