@@ -136,11 +136,20 @@ uint32_t dns_label_serialize(const dns_label_t *label, char *out_buf, const uint
     // Serialize len
     net_serializer_append_u8(&serializer, &label->len, 1);
 
-    // serialize content
-    net_serializer_append_raw(&serializer, (const char *)(&label->content[0]), label->len);
 
-    // Copy serialized content to buffer
-    net_serializer_copy_raw(&serializer, 0, out_buf, (sizeof(label->len) + label->len));
+    if( label->len & 0xC0 )
+    {
+        printf("Compressed label detected. Looking for data @ offset %u", label->len & 0x4F );
+        exit(-1);
+    }
+    else
+    {
+        // serialize content
+        net_serializer_append_raw(&serializer, (const char *)(&label->content[0]), label->len);
+    
+        // Copy serialized content to buffer
+        net_serializer_copy_raw(&serializer, 0, out_buf, (sizeof(label->len) + label->len));
+    }
 
     net_serializer_deinit(&serializer);
 
