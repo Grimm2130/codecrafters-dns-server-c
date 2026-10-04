@@ -270,7 +270,6 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
         // remove len or null terminator
         if( net_serializer_remove_u8( &serializer, 0, &len, 1 ) == 0 )
         {
-            printf("????%s\n\n", len >> 6 == 0x3 )
             offset += sizeof(u_int8_t);
 
             if( len )
