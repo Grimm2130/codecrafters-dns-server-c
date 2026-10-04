@@ -136,21 +136,11 @@ uint32_t dns_label_serialize(const dns_label_t *label, char *out_buf, const uint
     // Serialize len
     net_serializer_append_u8(&serializer, &label->len, 1);
 
+    // serialize content
+    net_serializer_append_raw(&serializer, (const char *)(&label->content[0]), label->len);
 
-    if( label->len & 0xC0 )
-    {
-        printf("Compressed label detected. Looking for data @ offset %u\n", label->len & 0x4F );
-        fflush(stdout);
-        exit(-1);
-    }
-    else
-    {
-        // serialize content
-        net_serializer_append_raw(&serializer, (const char *)(&label->content[0]), label->len);
-    
-        // Copy serialized content to buffer
-        net_serializer_copy_raw(&serializer, 0, out_buf, (sizeof(label->len) + label->len));
-    }
+    // Copy serialized content to buffer
+    net_serializer_copy_raw(&serializer, 0, out_buf, (sizeof(label->len) + label->len));
 
     net_serializer_deinit(&serializer);
 
@@ -167,6 +157,13 @@ uint32_t dns_label_deserialize(dns_label_t *label, const char *in_buf, const uin
 
     // Copy len
     net_serializer_remove_u8(&serializer, 0, &label->len, 1);
+
+    if( label->len & 0xC0 )
+    {
+        printf("Compressed label detected. Looking for data @ offset %u\n", label->len & 0x4F );
+        fflush(stdout);
+    }
+
     net_serializer_remove_raw(&serializer, 0, (char *)(&label->content), label->len);
 
     net_serializer_deinit(&serializer);
@@ -273,7 +270,9 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
         // remove len or null terminator
         if( net_serializer_remove_u8( &serializer, 0, &len, 1 ) == 0 )
         {
+            printf("????%s\n\n", len >> 6 == 0x3 )
             offset += sizeof(u_int8_t);
+
             if( len )
             {
                 if( query->label_cnt == DNS_MAX_LABEL_COUNT )
@@ -506,7 +505,7 @@ const char * dns_answer_str( dns_answer_t* answer )
     static char buf[DNS_ANSWER_STR_SIZE];
     static char temp[UINT16_MAX];
 
-    len += snprintf(buf + len, DNS_ANSWER_STR_SIZE - len, "Header { names: {\n" );
+    len += snprintf(buf + len, DNS_ANSWER_STR_SIZE - len, "names: {\n" );
 
     for( int i = 0; i < answer->label_cnt; i++ )
     {
@@ -516,7 +515,7 @@ const char * dns_answer_str( dns_answer_t* answer )
     memcpy( temp, answer->rddata, answer->rdlength );
     temp[answer->rdlength] = '\0';
 
-    len += snprintf( buf + len, DNS_ANSWER_STR_SIZE - len, "},\n type:%u, class: %u, desc-len: %u desc: %s",
+    len += snprintf( buf + len, DNS_ANSWER_STR_SIZE - len, "},\n\ttype:%u,\n\tclass: %u,\n\tdesc-len: %u,\n\tdesc: %s\n}",
         answer->type, 
         answer->_class,
         answer->rdlength,

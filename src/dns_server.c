@@ -421,7 +421,7 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
 
         if( bytes )
         {
-            printf("[Request] Question %s\n", dns_question_str(&question) );
+            printf("[Request] [Question] %s\n", dns_question_str(&question) );
 
             cir_buffer_write( &g_questions, (const char*)&question, sizeof(dns_question_t)) ;
 
