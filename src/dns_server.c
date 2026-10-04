@@ -409,14 +409,16 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
     dns_answer_t answer;
     dns_question_t question;
 
+    printf("Deserializing Questions\n");
+
     // Process all the questions
     for( uint16_t qIdx = 0; qIdx < hdr->qd_count; qIdx++ )
     {
         // extract the current question from the serializer
         bytes = dns_question_deserialize( 
             &question,
-            net_serializer_getbuf( &g_rxSerializer ),
-            net_serializer_get_size( &g_rxSerializer )
+            net_serializer_getbuf(&g_rxSerializer),
+            net_serializer_get_size(&g_rxSerializer)
         );
 
         if( bytes )

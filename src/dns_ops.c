@@ -151,6 +151,7 @@ uint32_t dns_label_deserialize(dns_label_t *label, const char *in_buf, const uin
 {
     net_serializer_t serializer;
     net_serializer_init(&serializer);
+    uint32_t ret_size = sizeof(label->len);
 
     // Copy content of buffer into serializer
     net_serializer_append_raw(&serializer, in_buf, size);
@@ -162,13 +163,21 @@ uint32_t dns_label_deserialize(dns_label_t *label, const char *in_buf, const uin
     {
         printf("Compressed label detected. Looking for data @ offset %u\n", label->len & 0x4F );
         fflush(stdout);
+        exit(-1);
     }
-
-    net_serializer_remove_raw(&serializer, 0, (char *)(&label->content), label->len);
+    else if( label->len <= DNS_LABEL_MAX_LEN )
+    {
+        net_serializer_remove_raw(&serializer, 0, (char *)(&label->content), label->len);
+        ret_size += label->len;
+    }
+    else if( label->len == 0 )
+    {
+        label->content[0] = '\0';
+    }
 
     net_serializer_deinit(&serializer);
 
-    return sizeof(label->len) + label->len;
+    return ret_size;
 }
 
 const char* dns_label_str( const dns_label_t* label )
@@ -252,6 +261,7 @@ uint32_t dns_question_serialize( const dns_question_t *query, char *out_buf, con
 uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, const uint32_t size)
 {
     char temp[64];
+    uint32_t label_len;
     uint32_t offset = 0;
     net_serializer_t serializer;
     uint8_t len;
@@ -267,44 +277,27 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
 
     do
     {
-        // remove len or null terminator
-        if( net_serializer_remove_u8( &serializer, 0, &len, 1 ) == 0 )
-        {
-            offset += sizeof(u_int8_t);
+        label_len = dns_label_deserialize( &(query->qname[query->label_cnt]),
+            net_serializer_getbuf( &serializer ),
+            net_serializer_get_size( &serializer )
+        );
 
-            if( len )
-            {
-                if( query->label_cnt == DNS_MAX_LABEL_COUNT )
-                {
-                    // ! ERROR
-                    printf("Question label content exceeded!\n");
-                    exit(-1);
-                }
-                // Extract the label content
-                else if(net_serializer_remove_raw(&serializer, 0, temp, len ) == 0 )
-                {
-                    // initialize the question label
-                    dns_label_init( &query->qname[query->label_cnt++], temp, len );
-    
-                    offset += len;
-                }
-                else
-                {
-                    // ! ERROR
-                }
-            }
-            else
-            {
-                // ! ERROR
-            }
+        // printf("Current label len %u\n", label_len );
+
+        offset += label_len;
+        net_serializer_remove_raw( &serializer, 0, NULL, label_len );
+        
+        if( label_len )
+        {
+            if( query->qname[query->label_cnt].content[0] != '\0') query->label_cnt++;
         }
         else
         {
-            // ! ERROR
+            // ! ERROR handle properly
+            printf("Invalid label length\n");
         }
-        
     }
-    while( (len != 0) );
+    while( label_len != 1 );
 
     if( net_serializer_remove_u16(&serializer, 0, &query->qtype, 1 )  )
     {
