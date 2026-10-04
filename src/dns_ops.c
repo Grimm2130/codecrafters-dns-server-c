@@ -139,7 +139,8 @@ uint32_t dns_label_serialize(const dns_label_t *label, char *out_buf, const uint
 
     if( label->len & 0xC0 )
     {
-        printf("Compressed label detected. Looking for data @ offset %u", label->len & 0x4F );
+        printf("Compressed label detected. Looking for data @ offset %u\n", label->len & 0x4F );
+        fflush(stdout);
         exit(-1);
     }
     else
