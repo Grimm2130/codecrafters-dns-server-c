@@ -22,6 +22,27 @@ void cir_buffer_init(cir_buffer_t *cbuf, const bool allow_overwrite)
     }
 }
 
+void cir_buffer_copy(cir_buffer_t * dst, const cir_buffer_t * src, const uint32_t item_size)
+{
+    dst->allow_overwrite = src->allow_overwrite;
+    dst->front = src->front;
+    dst->rear = src->rear;
+    dst->size = src->size;
+
+    for( uint32_t i = 0; i < CIR_BUFFER_CAPACITY; i++ )
+    {
+        if( src->buffer[i] )
+        {
+            dst->buffer[i] = calloc(item_size, sizeof(char));
+            memcpy( dst->buffer[i], src->buffer[i], item_size );
+        }
+        else
+        {
+            dst->buffer[i] = NULL;
+        }
+    }  
+}
+
 bool cir_buffer_is_empty(cir_buffer_t *cbuf)
 {
     return cbuf->size == 0;
@@ -105,8 +126,7 @@ void cir_buffer_deinit(cir_buffer_t *cbuf)
 {
     for (int i = 0; i < CIR_BUFFER_CAPACITY; i++)
     {
-        if (cbuf->buffer[i])
-            free(cbuf->buffer[i]);
+        if (cbuf->buffer[i]) free(cbuf->buffer[i]);
         cbuf->buffer[i] = NULL;
     }
 }

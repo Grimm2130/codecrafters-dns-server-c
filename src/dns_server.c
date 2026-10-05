@@ -16,6 +16,7 @@
 #include <assert.h>
 
 #define DNS_SECTION_BUFFER_SIZE   255U
+#define DNS_RX_BUFFER_SIZE        1024U
 
 bool g_runFlag;
 task_t g_receiver;
@@ -23,6 +24,7 @@ task_t g_transmitter;
 udp_server_handle_t g_udp_server_handle;
 sync_cir_buffer_t g_transmit_buffer;
 net_serializer_t g_rxSerializer;
+char g_rxBuffer[DNS_RX_BUFFER_SIZE];
 
 dns_hdr_t g_hdr;
 cir_buffer_t g_questions;
@@ -405,25 +407,102 @@ static void dns_process_msg__dns_hdr_valid_query_standard( dns_hdr_t* hdr )
 /// @param hdr 
 static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
 {
+    uint16_t c_pointer;
     uint32_t bytes;
     dns_answer_t answer;
     dns_question_t question;
+    uint32_t total_bytes = 0;
+    char rxStreamCache[DNS_RX_BUFFER_SIZE];
 
-    printf("Deserializing Questions\n");
+    // Copy into cache
+    memcpy( rxStreamCache, 
+        net_serializer_getbuf(&g_rxSerializer),
+        _MIN( net_serializer_get_size(&g_rxSerializer), DNS_RX_BUFFER_SIZE )
+    );
 
     // Process all the questions
     for( uint16_t qIdx = 0; qIdx < hdr->qd_count; qIdx++ )
     {
+        c_pointer = 0;
+
         // extract the current question from the serializer
         bytes = dns_question_deserialize( 
             &question,
             net_serializer_getbuf(&g_rxSerializer),
-            net_serializer_get_size(&g_rxSerializer)
+            net_serializer_get_size(&g_rxSerializer),
+            &c_pointer
         );
+
+        // question has compressed label
+        if( c_pointer )
+        {
+            bool done = false;
+            dns_label_t *compressed_label;
+            dns_label_t *referenced_label;
+            dns_question_t temp_question;
+            cir_buffer_t temp_questions;
+
+            // instantiate offset to account for header
+            uint32_t offset = DSN_HDR_SIZE;
+            
+            // Copy the processed questions
+            cir_buffer_copy( &temp_questions, &g_questions, sizeof(dns_question_t) );
+
+            while( (done == false) && cir_buffer_is_empty( &temp_questions ) == false )
+            {
+                uint16_t l_idx = 0;
+                
+                printf("[Pointer resolution] Curr off - %u, Expected - %u\n", offset, c_pointer );
+
+                cir_buffer_read( &temp_questions, (char*)&temp_question, sizeof(dns_question_t));
+                
+                while( (l_idx < temp_question.label_cnt) && offset < c_pointer )
+                {
+                    printf("[Pointer resolution] Curr off - %u, Expected - %u\n", offset, c_pointer );
+                    // increment the offset
+                    offset += sizeof(temp_question.qname[l_idx].len);       // label len
+                    offset += temp_question.qname[l_idx].len;               // label content
+                    l_idx++;
+                }
+                
+                // index found in question
+                if( offset == c_pointer )
+                {
+                    while(l_idx < temp_question.label_cnt)
+                    {
+                        referenced_label = &temp_question.qname[l_idx];
+
+                        // Copy the referenced label into the compressed label
+                        compressed_label = &question.qname[question.label_cnt++];
+                        memcpy( compressed_label, referenced_label, sizeof(dns_label_t) );
+
+                        l_idx++;
+                    }
+
+                    done = true;
+                    break;
+                }
+                // offset not in question
+                else
+                {
+                    offset += sizeof(uint8_t);      // null
+                    offset += sizeof(uint16_t);     // type
+                    offset += sizeof(uint16_t);     // class
+                }
+            }
+
+            if( done == false )
+            {
+                // ! ERROR
+                exit(-1);
+            }
+
+            cir_buffer_deinit( &temp_questions );
+        }
 
         if( bytes )
         {
-            printf("[Request] [Question] %s\n", dns_question_str(&question) );
+            printf("[Request] [Question] ([%u] bytes) %s\n", bytes, dns_question_str(&question) );
 
             cir_buffer_write( &g_questions, (const char*)&question, sizeof(dns_question_t)) ;
 
@@ -440,19 +519,24 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
             {
                 // ! ERROR
             }
-    
         }
         else
         {
-            // ! ERROR
+            // A compressed question has been returned
+            printf("Cannot handle compressed label\n");
+            exit(-1);
+
         }
+
+        total_bytes += bytes;
     }
 }
 
+
 static void dns_process_msg__dns_question( const dns_question_t* question, dns_answer_t* answer )
 {
-    printf("Processing Quesstion...\n");
-
+    printf("Processing Quesstion\n");
+    
     switch((DNS_RR_TYPE)question->qtype)
     {
         case DNS_RR_TYPE__A:
@@ -476,9 +560,12 @@ static void dns_process_msg__dns_question( const dns_question_t* question, dns_a
         case DNS_RR_TYPE__MX:
         case DNS_RR_TYPE__TXT:
         default:
-            printf("[INFO] unknown QUESTION type received\n");
+        printf("[INFO] unknown QUESTION type received\n");
         break;
     }
+    
+    printf("Processing Quesstion...\n");
+
 }
 
 static void dns_process_msg__dns_question_host_addr( const dns_question_t* question, dns_answer_t* answer )

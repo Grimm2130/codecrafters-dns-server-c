@@ -9,7 +9,9 @@ typedef struct domain_ip_mapping
 
 static const domain_ip_mapping s_domain_to_ip_lookup_table [] = 
 {
-    {"codecrafters.io", "8.8.8.8"}
+    {"codecrafters.io", "8.8.8.8"},
+    {"facebook.com", "8.8.8.8"},
+    {"google.com", "8.8.8.8"},
 };
 
 #define DNS_DOMAIN_IP_LOOKUP_TABLE_COUNT    (sizeof(s_domain_to_ip_lookup_table)/sizeof(domain_ip_mapping) )

@@ -62,28 +62,38 @@ class DNSQuestion:
     content : str = ""
     qtype : int = 0
     qclass : int = 0
-
+    is_compressed : bool = False
 
     def to_bytes( self ):
 
-        labels = self.content.split('.')
-        labels = [ 
-            DNSLabel(
-                len=len(label),
-                content=label
-            ) 
-            for label in labels
-        ]
+        bytes = None
 
-        bytes = b"".join([i.to_bytes() for i in labels])
-        bytes += b"\x00"
+        if self.is_compressed == False:
+
+            labels = self.content.split('.')
+            labels = [ 
+                DNSLabel(
+                    len=len(label),
+                    content=label
+                ) 
+                for label in labels
+            ]
+
+            bytes = b"".join([i.to_bytes() for i in labels])
+            bytes += b"\x00"
+
+        else:
+            bytes = 0xC000 | (int(self.content) & 0x3FFF)
+            bytes = struct.pack(
+                "!H",
+                bytes
+            )
 
         bytes += struct.pack(
             "!HH",
             self.qtype,
             self.qclass
         )
-
         return bytes
 
 
@@ -94,36 +104,58 @@ iters  = 0
 
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
 
-    sock.settimeout(5)
+    sock.settimeout(1)
 
     messages = [
+        # DNSHeader(
+        #     id = 1234,
+        #     qr = 0,
+        #     qd_count=1
+        # ).to_bytes() +
+        # DNSQuestion(
+        #     content="codecrafters.io",
+        #     qtype=1,
+        #     qclass=1
+        # ).to_bytes(),
+        
+        # DNSHeader(
+        #     id = 1235,
+        #     qr = 0,
+        #     qd_count=1
+        # ).to_bytes() +
+        # DNSQuestion(
+        #     content="facebook.io",
+        #     qtype=1,
+        #     qclass=1
+        # ).to_bytes(),
+        
         DNSHeader(
-            id = 1234,
+            id = 1236,
             qr = 0,
-            qd_count=1
+            qd_count=3
         ).to_bytes() +
         DNSQuestion(
             content="codecrafters.io",
             qtype=1,
             qclass=1
-        ).to_bytes(),
-        
-        DNSHeader(
-            id = 1235,
-            qr = 0,
-            qd_count=1
         ).to_bytes() +
         DNSQuestion(
             content="facebook.io",
             qtype=1,
             qclass=1
+        ).to_bytes() 
+        +
+        DNSQuestion(
+            content="33",
+            qtype=1,
+            qclass=1,
+            is_compressed=True
         ).to_bytes(),
-
     ]
 
     while True:
 
-        message = messages[ random.choice([0,1])]
+        message = messages[ random.choice( range(0, len(messages) ) )]
 
         print(f"Sending: {message} from {sock}")
         sock.sendto(message, (SERVER_IP, SERVER_PORT) )

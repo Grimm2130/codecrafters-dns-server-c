@@ -12,7 +12,6 @@ typedef struct net_serializer
     serializer_t * _srz;
 } net_serializer_t;
 
-
 net_serializer_t* net_serializer_create( );
 void net_serializer_init( net_serializer_t* srz );
 

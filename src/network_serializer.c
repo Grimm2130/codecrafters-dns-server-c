@@ -162,7 +162,10 @@ int net_serializer_remove_u8( net_serializer_t* srz, const uint32_t start_idx, u
     for( int i = 0; i < len; i++ )
     {
         serializer_remove( srz->_srz, start_idx, (char*)&data_end_aware, sizeof(uint8_t) );
-        data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip8(data_end_aware) : data_end_aware;
+        if(data)
+        {
+            data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip8(data_end_aware) : data_end_aware;
+        }
         offset += sizeof(uint8_t);
     }
 
@@ -179,7 +182,10 @@ int net_serializer_remove_u16( net_serializer_t* srz, const uint32_t start_idx, 
     for( int i = 0; i < len; i++ )
     {
         serializer_remove( srz->_srz, start_idx, (char*)&data_end_aware, sizeof(uint16_t) );
-        data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip16(data_end_aware) : data_end_aware;
+        if(data)
+        {
+            data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip16(data_end_aware) : data_end_aware;
+        }
         offset += sizeof(uint16_t);
     }
 
@@ -196,7 +202,10 @@ int net_serializer_remove_u32( net_serializer_t* srz, const uint32_t start_idx, 
     for( int i = 0; i < len; i++ )
     {
         serializer_remove( srz->_srz, start_idx, (char*)&data_end_aware, sizeof(uint32_t) );
-        data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip32(data_end_aware) : data_end_aware;
+        if(data)
+        {
+            data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip32(data_end_aware) : data_end_aware;
+        }
         offset += sizeof(uint32_t);
     }
 
@@ -213,7 +222,10 @@ int net_serializer_remove_u64( net_serializer_t* srz, const uint32_t start_idx, 
     for( int i = 0; i < len; i++ )
     {
         serializer_remove( srz->_srz, start_idx, (char*)&data_end_aware, sizeof(uint64_t) );
-        data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip64(data_end_aware) : data_end_aware;
+        if(data)
+        {
+            data[i] = srz->endianess == MACHINE_ENDIAN_TYPE_LITTLE_ENDIAN ? endian_flip64(data_end_aware) : data_end_aware;
+        }
         offset += sizeof(uint64_t);
     }
 

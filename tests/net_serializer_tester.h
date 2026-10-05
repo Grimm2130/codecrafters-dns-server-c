@@ -3,7 +3,7 @@
 
 #include "network_serializer.h"
 
-#define NET_SER_ITEM_COUNT  100U
+#define NET_SER_ITEM_COUNT  255U
 
 void run_tests_net_serializer();
 
@@ -34,11 +34,8 @@ void run_tests_net_serializer()
     
     // 8 bits
     assert(test_net_serializer_append_u8());
-    // printf("Serializer content Post append: {%s}\n", serializer_dump(g_net_serializer._srz) );
     assert(test_net_serializer_remove_u8());
-    // printf("Serializer content Post remove: {%s}\n", serializer_dump(g_net_serializer._srz) );
     assert(test_net_serializer_insert_u8());
-    // printf("Serializer content Post insert: {%s}\n", serializer_dump(g_net_serializer._srz) );
     assert(test_net_serializer_copy_u8());
     assert(test_net_serializer_remove_u8());
     

@@ -21,6 +21,7 @@ typedef struct cir_buffer
 
 cir_buffer_t *cir_buffer_create(const bool allow_overwrite);
 void cir_buffer_init(cir_buffer_t *cbuf, const bool allow_overwrite);
+void cir_buffer_copy(cir_buffer_t *, const cir_buffer_t *, const uint32_t item_size);
 
 bool cir_buffer_is_empty(cir_buffer_t *);
 bool cir_buffer_is_full(cir_buffer_t *);
