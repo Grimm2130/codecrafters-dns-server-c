@@ -4,6 +4,7 @@
 #include "sync_cir_buffer_tester.h"
 #include "serializer_test.h"
 #include "net_serializer_tester.h"
+#include "file_io_tester.h"
 
 int main(int argc, char const *argv[])
 {
@@ -13,6 +14,7 @@ int main(int argc, char const *argv[])
     run_test_sync_cir_buffer();
     run_test_serializer();
     run_tests_net_serializer();
+    run_tests_file_io();
     printf("All tests passed\n");
     return 0;
 }

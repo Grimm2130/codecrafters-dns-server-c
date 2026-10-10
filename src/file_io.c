@@ -103,11 +103,11 @@ file_io_ret_type file_open( file_t *fp)
             case FILE_T_ASCII:
             case FILE_T_BINARY:
             {
-                if((fp->_op_mask & FILE_READ_ONLY_MASK) == FILE_READ_ONLY_MASK) mode = "r";
+                if((fp->_op_mask & FILE_READ_WRITE_MASK) == FILE_READ_WRITE_MASK) mode = "w+";
+                else if((fp->_op_mask & FILE_APPEND_READ_MASK) == FILE_APPEND_READ_MASK) mode = "a+";
+                else if((fp->_op_mask & FILE_READ_ONLY_MASK) == FILE_READ_ONLY_MASK) mode = "r";
                 else if((fp->_op_mask & FILE_WRITE_ONLY_MASK) == FILE_WRITE_ONLY_MASK) mode = "w";
                 else if((fp->_op_mask & FILE_APPEND_ONLY_MASK) == FILE_APPEND_ONLY_MASK) mode = "a";
-                else if((fp->_op_mask & FILE_READ_WRITE_MASK) == FILE_READ_WRITE_MASK) mode = "w+";
-                else if((fp->_op_mask & FILE_APPEND_READ_MASK) == FILE_APPEND_READ_MASK) mode = "a+";
                 else mode = NULL;
             }
             break;
@@ -119,9 +119,19 @@ file_io_ret_type file_open( file_t *fp)
 
         if( mode )
         {
+            int len;
             char full_path[FILE_PATH_MAX + FILE_NAME_MAX ];
             
-            int len = snprintf( full_path, FILE_PATH_MAX + FILE_NAME_MAX, "%s/%s", fp->_path, fp->_name );
+            if( strlen( fp->_path ) )
+            {
+                len = snprintf( full_path, FILE_PATH_MAX + FILE_NAME_MAX, "%s/%s", fp->_path, fp->_name );
+            }
+            else
+            {
+                len = snprintf( full_path, FILE_PATH_MAX + FILE_NAME_MAX, "%s", fp->_name );
+            }
+            
+            printf("Attempting to open(%s) %s\n", mode, full_path);
 
             if( len > 0 )
             {
@@ -227,7 +237,7 @@ file_io_ret_type file_read_binary( file_t *fp, char * out_buf, uint32_t i_size, 
 }
 
 
-file_io_ret_type file_write_ascii( file_t *fp, char * in_buf, uint32_t n_count )
+file_io_ret_type file_write_ascii( file_t *fp, const char * in_buf, uint32_t n_count )
 {
     file_io_ret_type ret;
 
@@ -235,19 +245,19 @@ file_io_ret_type file_write_ascii( file_t *fp, char * in_buf, uint32_t n_count )
     {
         if( fp->opened )
         {
-            if( fputs( in_buf, fp->file_ptr ) > 0 )
+            if( fputs( in_buf, fp->file_ptr ) >= 0 )
             {
                 fp->chars.wr += strlen(in_buf);
                 ret = FILE_IO_RET_TYPE__SUCCESS;
             }
             else
             {
-                ret=  FILE_IO_RET_TYPE__FAIL_ON_WRITE_NOT_OPEN;
+                ret = FILE_IO_RET_TYPE__FAIL_ON_WRITE_FAIL;
             }
         }
         else
         {
-            ret = FILE_IO_RET_TYPE__FAIL_ON_WRITE_EMPTY;
+            ret=  FILE_IO_RET_TYPE__FAIL_ON_WRITE_NOT_OPEN;
         }
     }
     else
@@ -258,7 +268,7 @@ file_io_ret_type file_write_ascii( file_t *fp, char * in_buf, uint32_t n_count )
     return ret;
 }
 
-file_io_ret_type file_write_binary( file_t *fp, char *in_buf, uint32_t i_size, uint32_t *n_count )
+file_io_ret_type file_write_binary( file_t *fp, const char *in_buf, uint32_t i_size, uint32_t *n_count )
 {
     file_io_ret_type ret;
 
@@ -319,8 +329,6 @@ file_io_ret_type file_deinit( file_t *fp)
 {
     if( fp )
     {
-        fp->opened = false;
-        
         file_close( fp );
     }
 
@@ -337,4 +345,29 @@ file_io_ret_type file_release( file_t **fpp)
     }
 
     return FILE_IO_RET_TYPE__SUCCESS;
+}
+
+const char *file_io_ret_str( file_io_ret_type type )
+{
+    switch (type)
+    {
+    case FILE_IO_RET_TYPE__SUCCESS: return "Success";
+    case FILE_IO_RET_TYPE__FAIL_ON_NULL_FILE_PTR: return "Null File Pointer";
+    case FILE_IO_RET_TYPE__FAIL_ON_INIT_NO_PATH: return "No Path";
+    case FILE_IO_RET_TYPE__FAIL_ON_INIT_PATH_TOO_LARGE: return "Path Too Large";
+    case FILE_IO_RET_TYPE__FAIL_ON_INIT_NO_NAME: return "No Filename";
+    case FILE_IO_RET_TYPE__FAIL_ON_INIT_NAME_TOO_LARGE: return "Filename too large";
+    case FILE_IO_RET_TYPE__FAIL_ON_INIT_INV_F_TYPE: return "Invalid file type";
+    case FILE_IO_RET_TYPE__FAIL_ON_INIT_INV_OP_MASK: return "Invalid file operation mask";
+    case FILE_IO_RET_TYPE__FAIL_ON_OPEN: return "Fail on Open";
+    case FILE_IO_RET_TYPE__FAIL_ON_CLOSE: return "Fail on Close";
+    case FILE_IO_RET_TYPE__FAIL_ON_READ_EMPTY: return "Empty Read";
+    case FILE_IO_RET_TYPE__FAIL_ON_READ_NOT_OPEN: return "File not open";
+    case FILE_IO_RET_TYPE__FAIL_ON_WRITE_EMPTY: return "Empty Write";
+    case FILE_IO_RET_TYPE__FAIL_ON_WRITE_FAIL: return "Failed Write";
+    case FILE_IO_RET_TYPE__FAIL_ON_WRITE_NOT_OPEN: return "File Not Open";
+    case FILE_IO_RET_TYPE__FAIL_UNKNOWN:
+    default:
+    return "File Failure Unknown";
+    }
 }

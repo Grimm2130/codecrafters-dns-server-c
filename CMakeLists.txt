@@ -16,6 +16,7 @@ file(GLOB TESTS_FILES
     src/sync_cir_buffer.c
     src/serializer.c
     src/network_serializer.c
+    src/file_io.c
     tests/*
 )
 

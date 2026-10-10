@@ -44,6 +44,7 @@ typedef enum _file_io_ret_type
     FILE_IO_RET_TYPE__FAIL_ON_READ_EMPTY,
     FILE_IO_RET_TYPE__FAIL_ON_READ_NOT_OPEN,
     FILE_IO_RET_TYPE__FAIL_ON_WRITE_EMPTY,
+    FILE_IO_RET_TYPE__FAIL_ON_WRITE_FAIL,
     FILE_IO_RET_TYPE__FAIL_ON_WRITE_NOT_OPEN,
     FILE_IO_RET_TYPE__FAIL_UNKNOWN,
 } file_io_ret_type;
@@ -86,10 +87,11 @@ file_io_ret_type file_create( file_t **, file_type, uint8_t, const char *, const
 file_io_ret_type file_open( file_t *);
 file_io_ret_type file_read_ascii( file_t *, char *, uint32_t );
 file_io_ret_type file_read_binary( file_t *, char *, uint32_t, uint32_t*);
-file_io_ret_type file_write_ascii( file_t *, char *, uint32_t );
-file_io_ret_type file_write_binary( file_t *, char *, uint32_t, uint32_t* );
+file_io_ret_type file_write_ascii( file_t *, const char *, uint32_t );
+file_io_ret_type file_write_binary( file_t *, const char *, uint32_t, uint32_t* );
 file_io_ret_type file_close( file_t *);
 file_io_ret_type file_deinit( file_t *);
 file_io_ret_type file_release( file_t **);
+const char *file_io_ret_str( file_io_ret_type );
 
 #endif // __FILE_IO_H__
