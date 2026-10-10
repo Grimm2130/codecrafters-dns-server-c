@@ -208,7 +208,7 @@ static void dns_resolver_routine(void *arg)
         printf("Resolver handle: %s\n", status_message);
 
         // Check the queue for new data requested to be resolved
-        dequeue_client_msg_for_rx(&data);
+        dequeue_client_msg_for_resolver(&data);
         
         // transmit to the resolver
 
