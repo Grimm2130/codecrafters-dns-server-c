@@ -126,9 +126,10 @@ static void init_remote_resolver_handle( const char * resolver_addr)
 
 static void dns_receiver_routine(void *arg)
 {
+    int bytes;
+    char ip[20];
     udp_server_handle_t *srv_hndl = (udp_server_handle_t *)arg;
     client_msg_t received;
-    int bytes;
 
     while (g_runFlag)
     {
@@ -139,6 +140,15 @@ static void dns_receiver_routine(void *arg)
         {
             // Valid
             srv_hndl->rt_info.read_bytes += bytes;
+
+            ip_n_to_str(htonl(received.context.addr.sin_addr.s_addr), ip, 20);
+
+            printf("Receiver [%d] bytes to %s:%u {%s}\n", 
+                received.len, 
+                ip, 
+                htons(received.context.addr.sin_port),
+                client_msg_str(&received)
+            );
 
             dns_handle_new_client_data(&received);
         }
@@ -199,7 +209,8 @@ static void dns_resolver_routine(void *arg)
     char ip[20];
     char status_message[255];
     udp_server_handle_t *resolver_handle = (udp_server_handle_t *)arg;
-    client_msg_t data;
+    client_msg_t target_client_data;            // stores client info
+    client_msg_t resolver_data;               // stores resolver info
 
     while (g_runFlag)
     {
@@ -208,43 +219,53 @@ static void dns_resolver_routine(void *arg)
         printf("Resolver handle: %s\n", status_message);
 
         // Check the queue for new data requested to be resolved
-        dequeue_client_msg_for_resolver(&data);
+        dequeue_client_msg_for_resolver(&target_client_data);
+        
+        // update the message to target the resolver
+        memcpy( &resolver_data, &target_client_data, sizeof(client_msg_t) );
+
+        // Update the resolver address info
+        memcpy( &resolver_data.context, resolver_handle->context, sizeof(network_context_t));
+
+        // Log info in message
+        ip_n_to_str(htonl(resolver_data.context.addr.sin_addr.s_addr), ip, 20);
+        printf("[Resolver] Transmitting [%d] bytes to %s:%u {%s}\n", 
+            resolver_data.len, 
+            ip, 
+            htons(resolver_data.context.addr.sin_port),
+            client_msg_str(&resolver_data)
+        );
         
         // transmit to the resolver
+        bytes = udp_server_handle_send(resolver_handle, &resolver_data);
 
-        ip_n_to_str(htonl(data.context.addr.sin_addr.s_addr), ip, 20);
 
-        printf(">>> [Resolver] Transmitting [%d] bytes to %s:%u {%s}\n", 
-            data.len, 
-            ip, 
-            htons(data.context.addr.sin_port),
-            client_msg_str(&data)
-        );
-
-        bytes = udp_server_handle_send(resolver_handle, &data);
-        printf("[Resolver] Transmitted\n");
-        fflush(stdout);
 
         if (bytes > 0)
         {
             resolver_handle->rt_info.written_bytes += bytes;
             
             // wait for data to return from the resolver
-            bytes = udp_server_handle_receive( resolver_handle, &data );
-    
+            bytes = udp_server_handle_receive( resolver_handle, &resolver_data );
+
+            
             printf(">>> [Resolver] Received [%d] bytes from %s:%u {%s}\n", 
-                data.len, 
+                resolver_data.len, 
                 ip, 
-                htons(data.context.addr.sin_port),
-                client_msg_str(&data)
+                htons(resolver_data.context.addr.sin_port),
+                client_msg_str(&resolver_data)
             );
-    
+            
             if (bytes > 0)
             {
                 resolver_handle->rt_info.read_bytes += bytes;
+                
+                // Copy the data back to the client data
+                memcpy( target_client_data.data, resolver_data.data, bytes);
+                target_client_data.len = bytes;
 
                 // Append the result to the transmit buffer
-                enqueue_client_msg_for_tx( &data );
+                enqueue_client_msg_for_tx( &target_client_data );
                 
             }
             else if( bytes == 0 )
