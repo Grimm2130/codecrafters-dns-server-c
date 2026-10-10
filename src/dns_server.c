@@ -8,10 +8,11 @@
 #include "udp_server_handle.h"
 #include "utils.h"
 #include "client_msg.h"
-#include "tasks.h"
+#include "task.h"
 #include "cir_buffer.h"
 #include "sync_cir_buffer.h"
 #include "network_serializer.h"
+#include "network_context.h"
 #include "serializer.h"
 #include <assert.h>
 
@@ -19,11 +20,17 @@
 #define DNS_RX_BUFFER_SIZE        1024U
 
 bool g_runFlag;
+bool g_remote_resolver_avail;
 task_t g_receiver;
 task_t g_transmitter;
-udp_server_handle_t g_udp_server_handle;
+task_t g_resolver;
+udp_server_handle_t g_server_handle;
+udp_server_handle_t g_remote_resolver_handle;
 sync_cir_buffer_t g_transmit_buffer;
+sync_cir_buffer_t g_resolver_transmit_buffer;
 net_serializer_t g_rxSerializer;
+
+
 char g_rxBuffer[DNS_RX_BUFFER_SIZE];
 
 dns_hdr_t g_hdr;
@@ -44,8 +51,9 @@ typedef enum dns_service_ret_code
 
 static void print_msg(const uint8_t *data, const int len);
 static void dns_handle_new_client_data(client_msg_t *msg);
-static void enqueue_client_message(const client_msg_t *msg);
-static void dequeue_client_message(client_msg_t *msg);
+static void enqueue_client_msg_for_tx(const client_msg_t *msg);
+static void enqueue_client_msg_for_resolver(const client_msg_t *msg);
+static void dequeue_client_msg_for_rx(client_msg_t *msg);
 
 static void dns_process_msg();
 static void dns_process_msg__dns_hdr( dns_hdr_t* hdr );
@@ -67,7 +75,55 @@ static uint32_t dns_reply_serialize_hdr(dns_hdr_t *hdr, char *rply_buf, const ui
 static uint32_t dns_reply_serialize_question(dns_question_t *question, char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_answer(dns_answer_t *answer, char *rply_buf, const uint32_t size);
 
-static void *dns_receiver_routine(void *arg)
+static void init_remote_resolver_handle( const char * resolver_addr);
+
+static void init_remote_resolver_handle( const char * resolver_addr)
+{
+    g_remote_resolver_avail = false;
+
+    if( resolver_addr )
+    {
+        char *ip;
+        uint16_t port;
+        char *token;
+        char temp[20];
+        strncpy( temp, resolver_addr, 20 );
+
+        // Get IP
+        token = strtok( temp, ":" );
+        if( token )
+        {
+            ip = token;
+            
+            // Get Port number
+            token = strtok( NULL, ":" );
+            if( token )
+            {
+                port = atoi(token);
+                
+                
+                // mark the remote resolver as being available
+                g_remote_resolver_avail = true;
+                
+                udp_server_handle_params_t resolver_udp_handle_params = 
+                {
+                    .client_allow_mask = -1,
+                    .port = port,
+                    .rcv_to = 1e6
+                };
+                
+                strncpy( resolver_udp_handle_params.ip, ip, sizeof(resolver_udp_handle_params.ip)/sizeof(resolver_udp_handle_params.ip[0]));
+                
+                printf("Remote DNS Resolver @<%s>:<%u>\n", ip, port );
+
+                // initialize the IP address
+                udp_server_handle_init( &g_remote_resolver_handle, &resolver_udp_handle_params );
+            }
+        }        
+    }
+}
+
+static void dns_receiver_routine(void *arg)
 {
     udp_server_handle_t *srv_hndl = (udp_server_handle_t *)arg;
     client_msg_t received;
@@ -96,11 +152,9 @@ static void *dns_receiver_routine(void *arg)
     }
 
     // Display client information
-
-    return NULL;
 }
 
-static void *dns_transmitter_routine(void *arg)
+static void dns_transmitter_routine(void *arg)
 {
     int bytes;
     char ip[20];
@@ -109,7 +163,7 @@ static void *dns_transmitter_routine(void *arg)
 
     while (g_runFlag)
     {
-        dequeue_client_message(&to_transmit);
+        dequeue_client_msg_for_rx(&to_transmit);
         ip_n_to_str(htonl(to_transmit.context.addr.sin_addr.s_addr), ip, 20);
 
         printf(">>> Transmitting [%d] bytes to %s:%u {%s}\n", 
@@ -136,11 +190,87 @@ static void *dns_transmitter_routine(void *arg)
             srv_hndl->rt_info.invalid_transmits++;
         }
     }
-
-    return NULL;
 }
 
-void dns_service_start()
+static void dns_resolver_routine(void *arg)
+{
+    int bytes;
+    char ip[20];
+    char status_message[255];
+    udp_server_handle_t *resolver_handle = (udp_server_handle_t *)arg;
+    client_msg_t data;
+
+    while (g_runFlag)
+    {
+        udp_server_handle_get_info(resolver_handle, status_message, 255);
+
+        printf("%s", status_message);
+
+        // Check the queue for new data requested to be resolved
+        dequeue_client_msg_for_rx(&data);
+        
+        // transmit to the resolver
+
+        ip_n_to_str(htonl(data.context.addr.sin_addr.s_addr), ip, 20);
+
+        printf(">>> [Resolver] Transmitting [%d] bytes to %s:%u {%s}\n", 
+            data.len, 
+            ip, 
+            htons(data.context.addr.sin_port),
+            client_msg_str(&data)
+        );
+
+        bytes = udp_server_handle_send(resolver_handle, &data);
+        printf("[Resolver] Transmitted\n");
+        fflush(stdout);
+
+        if (bytes > 0)
+        {
+            resolver_handle->rt_info.written_bytes += bytes;
+            
+            // wait for data to return from the resolver
+            bytes = udp_server_handle_receive( resolver_handle, &data );
+    
+            printf(">>> [Resolver] Received [%d] bytes from %s:%u {%s}\n", 
+                data.len, 
+                ip, 
+                htons(data.context.addr.sin_port),
+                client_msg_str(&data)
+            );
+    
+            if (bytes > 0)
+            {
+                resolver_handle->rt_info.read_bytes += bytes;
+
+                // Append the result to the transmit buffer
+                enqueue_client_msg_for_tx( &data );
+                
+            }
+            else if( bytes == 0 )
+            {
+                resolver_handle->rt_info.read_timeouts++;
+            }
+            else
+            {
+                resolver_handle->rt_info.read_timeouts++;
+                //
+            }
+    
+
+        }
+        else
+        {
+            resolver_handle->rt_info.invalid_transmits++;
+            //
+        }
+
+
+    }
+}
+
+
+
+void dns_service_start( const char * forwarding_addr )
 {
     // Initialize dns message serializers
     net_serializer_init(&g_rxSerializer);
@@ -151,13 +281,14 @@ void dns_service_start()
 
     // initialize transmit buffer
     sync_cir_buffer_init(&g_transmit_buffer, false);
+    sync_cir_buffer_init(&g_resolver_transmit_buffer, false);
 
     // Intialize task params
     task_params_t receiver_task_param = {
         .can_join = true,
         .prio = 10,
         .stack_size = 1e6,
-        .arg = (void *)(&g_udp_server_handle),
+        .arg = (void *)(&g_server_handle),
         .fn = dns_receiver_routine
     };
 
@@ -165,8 +296,16 @@ void dns_service_start()
         .can_join = true,
         .prio = 10,
         .stack_size = 1e6,
-        .arg = (void *)(&g_udp_server_handle),
+        .arg = (void *)(&g_server_handle),
         .fn = dns_transmitter_routine
+    };
+
+    task_params_t resolver_task_params = {
+        .can_join = true,
+        .prio = 10,
+        .stack_size = 1e6,
+        .arg = (void *)(&g_remote_resolver_handle),
+        .fn = dns_resolver_routine
     };
 
     // initialize serve_handle params
@@ -176,23 +315,34 @@ void dns_service_start()
         .rcv_to = (uint32_t)1e6
     };
 
-    udp_server_handle_init(&g_udp_server_handle, &udp_server_handle_param);
+    udp_server_handle_init(&g_server_handle, &udp_server_handle_param);
 
     // initialize rx & tx tasks
     task_init(&g_receiver, &receiver_task_param);
     task_init(&g_transmitter, &transmitter_task_param);
-
+    if( g_remote_resolver_avail )
+    {
+        task_init(&g_resolver, &resolver_task_params);
+    }
+    
     g_runFlag = true;
-
+    
     // Start transmitter
     task_start(&g_receiver);
     task_start(&g_transmitter);
+
+    if( g_remote_resolver_avail )
+    {
+        task_start(&g_resolver);
+    }
+
+
 
     static char server_status[200];
 
     while (1)
     {
-        udp_server_handle_get_info(&g_udp_server_handle, server_status, 200);
+        udp_server_handle_get_info(&g_server_handle, server_status, 200);
         printf("Server Status : %s\n", server_status);
 
         sleep(3);
@@ -204,44 +354,53 @@ void dns_service_stop()
 {
     g_runFlag = false;
 
-    udp_server_handle_deinit(&g_udp_server_handle);
+    udp_server_handle_deinit(&g_server_handle);
 }
 
 static void dns_handle_new_client_data(client_msg_t *msg)
 {
-    uint16_t client_port;
-    char client_ip_addr[20];
-    client_msg_t response;
+
+    if( g_remote_resolver_avail )
+    {
+
+    }
+    else
+    {
+        uint16_t client_port;
+        char client_ip_addr[20];
+        client_msg_t response;
+        
+        ip_n_to_str(ntohl(msg->context.addr.sin_addr.s_addr), client_ip_addr, 20);
+        client_port = ntohs(msg->context.addr.sin_port);
     
-    ip_n_to_str(ntohl(msg->context.addr.sin_addr.s_addr), client_ip_addr, 20);
-    client_port = ntohs(msg->context.addr.sin_port);
-
-    printf(">>> Received [%d] bytes from %s:%u {%s}\n", 
-        msg->len, 
-        client_ip_addr, 
-        client_port,
-        client_msg_str(msg)
-    );
-
-    // Copy the message context information
-    memcpy( &(response.context), &(msg->context), sizeof(msg->context) );
+        printf(">>> Received [%d] bytes from %s:%u {%s}\n", 
+            msg->len, 
+            client_ip_addr, 
+            client_port,
+            client_msg_str(msg)
+        );
     
-    cir_buffer_clear( &g_questions ); 
-    cir_buffer_clear( &g_answers ); 
+        // Copy the message context information
+        memcpy( &(response.context), &(msg->context), sizeof(msg->context) );
+        
+        cir_buffer_clear( &g_questions ); 
+        cir_buffer_clear( &g_answers ); 
+    
+        // Clear the receiver serializer
+        net_serializer_clear(&g_rxSerializer);
+    
+        // Copy the message into the serializer
+        net_serializer_append_raw( &g_rxSerializer, msg->data, msg->len );
+    
+        // process the message
+        dns_process_msg();
+    
+        memset(response.data, 0, CLIENT_DATA_SIZE);
+        response.len = dns_reply_serialize(response.data, CLIENT_DATA_SIZE);
+    
+        enqueue_client_msg_for_tx(&response);
+    }
 
-    // Clear the receiver serializer
-    net_serializer_clear(&g_rxSerializer);
-
-    // Copy the message into the serializer
-    net_serializer_append_raw( &g_rxSerializer, msg->data, msg->len );
-
-    // process the message
-    dns_process_msg();
-
-    memset(response.data, 0, CLIENT_DATA_SIZE);
-    response.len = dns_reply_serialize(response.data, CLIENT_DATA_SIZE);
-
-    enqueue_client_message(&response);
 }
 
 static void print_msg(const uint8_t *data, const int len)
@@ -253,12 +412,17 @@ static void print_msg(const uint8_t *data, const int len)
     printf("\n");
 }
 
-static void enqueue_client_message(const client_msg_t *msg)
+static void enqueue_client_msg_for_tx(const client_msg_t *msg)
 {
     sync_cir_buffer_write(&g_transmit_buffer, (const char *)msg, CLIENT_MSG_SIZE, false);
 }
 
-static void dequeue_client_message(client_msg_t *msg)
+static void enqueue_client_msg_for_resolver(const client_msg_t *msg)
+{
+    sync_cir_buffer_write(&g_resolver_transmit_buffer, (const char *)msg, CLIENT_MSG_SIZE, false);
+}
+
+static void dequeue_client_msg_for_rx(client_msg_t *msg)
 {
     sync_cir_buffer_read(&g_transmit_buffer, (char *)msg, CLIENT_MSG_SIZE, false);
 }

@@ -2,7 +2,6 @@
 #include "cir_buffer.h"
 #include "network_context.h"
 #include "utils.h"
-#include "tasks.h"
 #include "client_msg.h"
 
 #define ROUTINE_STACK_SIZE
@@ -34,19 +33,37 @@ udp_server_handle_ret_code_t udp_server_handle_init(udp_server_handle_t *srv, ud
     if ((ret = network_context_create_socket(srv->context)) >= 0)
     {
         int allow_reuse = 1;
-        // Set required socket options
+
+        // Allow address reuse
         if ((ret = network_context_setsocket_opt(srv->context, SOL_SOCKET, SO_REUSEADDR, &allow_reuse, sizeof(allow_reuse))) >= 0)
         {
-            // Bind socket
-            if ((ret = network_context_bind_socket(srv->context)) == 0)
+
+            // set receiver timeout
+            struct timeval timeout =
             {
-                retCode = SRV_HNDL_SUCCESS;
+                .tv_sec = params->rcv_to / ((uint32_t)1e6),
+                .tv_usec = params->rcv_to % ((uint32_t)1e6)
+            };
+
+            if ((ret = network_context_setsocket_opt(srv->context, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout))) >= 0)
+            {
+                // Bind socket
+                if ((ret = network_context_bind_socket(srv->context)) == 0)
+                {
+                    retCode = SRV_HNDL_SUCCESS;
+                }
+                else
+                {
+                    // ! EROR
+                    retCode = SRV_HNDL_SOCKET_BIND_FAIL;
+                }
             }
             else
             {
                 // ! EROR
-                retCode = SRV_HNDL_SOCKET_BIND_FAIL;
+                retCode = SRV_HNDL_SET_SOC_OPT_FAIL;
             }
+            
         }
         else
         {

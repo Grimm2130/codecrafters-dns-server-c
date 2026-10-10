@@ -9,6 +9,11 @@
 - [x] Test Serializer
 - [x] Review Bit operation relevant to implementations
 - [x] Test NetSerializer
+- [ ] Implement File Logger
+- [ ] Update implementation for network context
+  - [ ] Allow Specification for UDP network context
+  - [ ] Allow Specification for TCP network context
+- [ ] Update implementation for UDP Handler
 - [ ] Remove the label count from the dns deserializer functionality
 - [ ] Implement the DNS question deserializer function
 - [ ] Implement the DNS answer deserializer function,

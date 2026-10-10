@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 typedef void* routine_arg;
-typedef void* (*routine_fn)(void* arg);
+typedef void (*routine_fn)(void* arg);
 
 typedef struct routine
 {

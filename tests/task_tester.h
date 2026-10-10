@@ -1,7 +1,7 @@
 #if !defined(__TAST_TESTER_H__)
 #define __TAST_TESTER_H__
 
-#include "tasks.h"
+#include "task.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 task_params_t param[NUM_TASKS];
 task_t tasks[NUM_TASKS];
 
-static void *task_test_routines(void *arg)
+static void task_test_routines(void *arg)
 {
     FILE *fp;
     char fullPath[100];
@@ -28,8 +28,6 @@ static void *task_test_routines(void *arg)
 
         fclose(fp);
     }
-
-    return NULL;
 }
 
 void run_tests_task();

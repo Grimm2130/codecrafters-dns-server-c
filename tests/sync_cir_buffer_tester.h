@@ -1,7 +1,7 @@
 #if !defined(__SYNC_CIR_BUFFER_TESTER_H__)
 #define __SYNC_CIR_BUFFER_TESTER_H__
 
-#include "tasks.h"
+#include "task.h"
 #include "sync_cir_buffer.h"
 #include "students.h"
 
@@ -25,7 +25,7 @@ void run_test_sync_cir_buffer()
     deinit();
 }
 
-void *producer_routine(void *arg)
+void producer_routine(void *arg)
 {
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     for (int i = 0; i < ITERS; i++)
@@ -37,11 +37,9 @@ void *producer_routine(void *arg)
         // sleep(1);
     }
     fflush(stdout);
-
-    return NULL;
 }
 
-void *consumer_routine(void *arg)
+void consumer_routine(void *arg)
 {
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
@@ -54,8 +52,6 @@ void *consumer_routine(void *arg)
         // sleep(1);
     }
     fflush(stdout);
-
-    return NULL;
 }
 
 static void init()
