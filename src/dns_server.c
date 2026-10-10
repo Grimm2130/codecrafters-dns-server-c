@@ -366,7 +366,8 @@ static void dns_handle_new_client_data(client_msg_t *msg)
 
     if( g_remote_resolver_avail )
     {
-
+        // Append to the resolver's buffer
+        enqueue_client_msg_for_resolver( msg );
     }
     else
     {
