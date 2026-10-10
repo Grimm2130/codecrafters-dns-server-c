@@ -54,6 +54,7 @@ static void dns_handle_new_client_data(client_msg_t *msg);
 static void enqueue_client_msg_for_tx(const client_msg_t *msg);
 static void enqueue_client_msg_for_resolver(const client_msg_t *msg);
 static void dequeue_client_msg_for_rx(client_msg_t *msg);
+static void dequeue_client_msg_for_resolver(client_msg_t *msg);
 
 static void dns_process_msg();
 static void dns_process_msg__dns_hdr( dns_hdr_t* hdr );
@@ -430,6 +431,11 @@ static void enqueue_client_msg_for_resolver(const client_msg_t *msg)
 static void dequeue_client_msg_for_rx(client_msg_t *msg)
 {
     sync_cir_buffer_read(&g_transmit_buffer, (char *)msg, CLIENT_MSG_SIZE, false);
+}
+
+static void dequeue_client_msg_for_resolver(client_msg_t *msg)
+{
+    sync_cir_buffer_read(&g_resolver_transmit_buffer, (char *)msg, CLIENT_MSG_SIZE, false);
 }
 
 /// @brief Process the DNS message that's been received
