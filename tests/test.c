@@ -5,6 +5,7 @@
 #include "serializer_test.h"
 #include "net_serializer_tester.h"
 #include "file_io_tester.h"
+#include "logger_tester.h"
 
 int main(int argc, char const *argv[])
 {
@@ -15,6 +16,7 @@ int main(int argc, char const *argv[])
     run_test_serializer();
     run_tests_net_serializer();
     run_tests_file_io();
+    run_tests_logger();
     printf("All tests passed\n");
     return 0;
 }

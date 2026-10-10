@@ -90,14 +90,14 @@ static void logger_context_mgr_init( );
 static void logger_context_mgr_deinit( );
 
 
-static logger_ret_type logger_context_mgr_register_context( logger_t *, logger_params_t* );
+static logger_ret_type logger_context_mgr_register_context( logger_t *, const logger_params_t* );
 static logger_ret_type logger_context_mgr_unregister_context( logger_t * );
 static logger_ret_type logger_context_mgr_append_log( logger_t *, log_entry_t * );
 static void logger_context_mgr_set_log_level( logger_t *, log_level );
 static const log_level logger_context_mgr_get_log_level( logger_t * );
 
-static logger_ret_type logger_context_create( logger_context_t**, logger_params_t* );
-static logger_ret_type logger_context_init( logger_context_t*, logger_params_t* );
+static logger_ret_type logger_context_create( logger_context_t**, const logger_params_t* );
+static logger_ret_type logger_context_init( logger_context_t*, const logger_params_t* );
 static bool logger_context_ready_to_write( logger_context_t* );
 static void logger_context_append_log( logger_context_t*, log_entry_t * );
 static void logger_context_write( logger_context_t* );
@@ -140,6 +140,7 @@ static void logger_context_mgr_init(  )
 {
     if( !s_context_mgr_initialized )
     {   
+        // initialized contexts
         for( uint8_t i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
         {
             _LOCK(s_context_mgr_lock)
@@ -151,7 +152,6 @@ static void logger_context_mgr_init(  )
 
         // Start writer thread
         s_context_mgr._log_writter = task_create( &s_context_task_params );
-
         task_start( s_context_mgr._log_writter );
 
         s_context_mgr_initialized = true;
@@ -191,14 +191,14 @@ static void logger_context_mgr_deinit( )
 
 /*====================================================================*/
 
-static logger_ret_type logger_context_mgr_register_context( logger_t *logger, logger_params_t *params )
+static logger_ret_type logger_context_mgr_register_context( logger_t *logger, const logger_params_t *params )
 {
     uint8_t i;
     logger_ret_type ret;
     
-    // Find available slot and instantiate context
     _LOCK( s_context_mgr_lock )
     {
+        // Find available slot and instantiate context
         for( i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
         {
             if( s_context_mgr.contexts[i] == NULL ) break;
@@ -326,13 +326,14 @@ static const log_level logger_context_mgr_get_log_level( logger_t *logger )
 
 /*====================================================================*/
 
-static logger_ret_type logger_context_create( logger_context_t** context_ptr, logger_params_t* params )
+static logger_ret_type logger_context_create( logger_context_t** context_ptr, const  logger_params_t* params )
 {
     (*context_ptr) = calloc(1, sizeof(logger_context_t));
     return logger_context_init( *context_ptr, params );
 }
 
-static logger_ret_type logger_context_init( logger_context_t* context, logger_params_t* params )
+
+static logger_ret_type logger_context_init( logger_context_t* context, const logger_params_t* params )
 {
     logger_ret_type ret;
 
@@ -557,7 +558,6 @@ static void logger_writer_routine( void * arg )
         // loop every 5 ms
         usleep(5000);
 
-
         // iterate over the contexts and check if there's data available
         for( uint8_t i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
         {
@@ -613,7 +613,7 @@ void logger_deinit( )
 }
 
 
-logger_ret_type logger_get_instance( logger_t *logger, logger_params_t* params )
+logger_ret_type logger_get_instance( logger_t *logger, const logger_params_t* params )
 {
     return logger_context_mgr_register_context( logger, params );
 }

@@ -50,7 +50,7 @@ typedef struct logger_params
 
 void logger_init( );
 void logger_deinit( );
-logger_ret_type logger_get_instance( logger_t *, logger_params_t* );
+logger_ret_type logger_get_instance( logger_t *, const logger_params_t* );
 // logger_ret_type logger_log( logger_t*, const log_level level, const char * msg );
 void log_set_level( logger_t*, log_level );
 log_level log_get_level( logger_t* );

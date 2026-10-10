@@ -204,7 +204,7 @@ static void dns_resolver_routine(void *arg)
     {
         udp_server_handle_get_info(resolver_handle, status_message, 255);
 
-        printf("%s", status_message);
+        printf("Resolver handle: %s\n", status_message);
 
         // Check the queue for new data requested to be resolved
         dequeue_client_msg_for_rx(&data);
@@ -272,6 +272,12 @@ static void dns_resolver_routine(void *arg)
 
 void dns_service_start( const char * forwarding_addr )
 {
+
+    if( forwarding_addr )
+    {
+        init_remote_resolver_handle( forwarding_addr );
+    }
+
     // Initialize dns message serializers
     net_serializer_init(&g_rxSerializer);
 
@@ -335,8 +341,6 @@ void dns_service_start( const char * forwarding_addr )
     {
         task_start(&g_resolver);
     }
-
-
 
     static char server_status[200];
 

@@ -19,6 +19,8 @@ int main( int argc, char * argv[]) {
 	{
 		resolver_addr = argv[2];
 	}
+
+	printf("Resolver address %s\n", resolver_addr ? resolver_addr :  "");
 	
 	dns_service_start( resolver_addr );
 

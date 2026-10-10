@@ -17,6 +17,7 @@ file(GLOB TESTS_FILES
     src/serializer.c
     src/network_serializer.c
     src/file_io.c
+    src/logger.c
     tests/*
 )
 

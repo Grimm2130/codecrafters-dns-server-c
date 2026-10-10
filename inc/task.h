@@ -42,10 +42,10 @@ typedef struct task
 } task_t;
 
 // Create
-task_t * task_create( task_params_t* params );
+task_t * task_create( const task_params_t* params );
 
 // Init
-void task_init( task_t* task, task_params_t* params );
+void task_init( task_t* task, const task_params_t* params );
 
 // Start
 void task_start( task_t* task);

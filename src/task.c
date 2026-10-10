@@ -56,14 +56,14 @@ static int task_set_thread_attr( pthread_attr_t* attr, bool joinable,  uint32_t 
     return ret;
 }
 
-task_t * task_create( task_params_t* params )
+task_t * task_create( const task_params_t* params )
 {
     task_t * task = calloc(1, sizeof(task_t));
     task_init( task, params );
     return task;
 }
 
-void task_init( task_t* task, task_params_t* params )
+void task_init( task_t* task, const task_params_t* params )
 {
     task->status.running = task->status.started = false;
     
