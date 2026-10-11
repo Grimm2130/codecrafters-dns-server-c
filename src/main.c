@@ -4,28 +4,8 @@
 #include "dns_server.h"							
 
 int main( int argc, char * argv[]) {
-	// Disable output buffering
-	setbuf(stdout, NULL);
- 	setbuf(stderr, NULL);
 
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-    printf("Logs from your program will appear here!\n");
-
-    // TODO: Uncomment the code below to pass the first stage
-	// RunServer();
-	char *resolver_addr = NULL;
-
-	if(argc == 3 && (strcmp( argv[1], "--resolver" ) == 0 ))
-	{
-		resolver_addr = argv[2];
-	}
-
-	printf("Resolver address %s\n", resolver_addr ? resolver_addr :  "");
-	
-	dns_service_start( resolver_addr );
-
-	dns_service_stop();
- 
+	dns_server_main( argc, argv );
     return 0;
 }
 

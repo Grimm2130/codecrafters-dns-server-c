@@ -15,13 +15,14 @@
 sync_cir_buffer_t *sync_cir_buffer_create(bool allow_overwrite)
 {
     sync_cir_buffer_t *buf = calloc(1, sizeof(sync_cir_buffer_t));
+
     if (sync_cir_buffer_init(buf, allow_overwrite))
     {
         free(buf);
         buf = NULL;
     }
 
-    return NULL;
+    return buf;
 }
 
 int sync_cir_buffer_init(sync_cir_buffer_t *buf, bool allow_overwrite)
@@ -87,10 +88,13 @@ int sync_cir_buffer_write(sync_cir_buffer_t *buf, const char *data, const uint32
 {
     LOCK(buf);
 
-    // Wait for new data to be available
-    while (cir_buffer_is_full(buf->_cbuf))
+    if( buf->_cbuf->allow_overwrite == false )
     {
-        WAIT_WRITE(buf);
+        // Wait for new data to be available
+        while (cir_buffer_is_full(buf->_cbuf))
+        {
+            WAIT_WRITE(buf);
+        }
     }
 
     int res = cir_buffer_write(buf->_cbuf, data, amnt);

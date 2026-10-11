@@ -22,8 +22,12 @@
 
 #define     INVALID_LOGGER_CONTEXT_ID   MAX_LOGGER_CONTEXTS + 1
 
-#define _LOCK(lock_ptr) (pthread_mutex_lock(&(lock_ptr)));
-#define _UNLOCK(lock_ptr) (pthread_mutex_unlock(&(lock_ptr)));
+#define  _LOCK(lock_ptr) (pthread_mutex_lock(&(lock_ptr)));
+#define  _UNLOCK(lock_ptr) (pthread_mutex_unlock(&(lock_ptr)));
+
+#define  RD_LOCK(lock_ptr) (pthread_rwlock_rdlock(&(lock_ptr)));
+#define  WR_LOCK(lock_ptr) (pthread_rwlock_wrlock(&(lock_ptr)));
+#define  RW_UNLOCK(lock_ptr) (pthread_rwlock_unlock(&(lock_ptr)));
 
 #define MGR_SIGNAL_READ(cv_ptr) (pthread_cond_signal(&(cv_ptr)))
 #define MGR_BROADCAST_READ(cv_ptr) (pthread_cond_broadcast(&(cv_ptr)))
@@ -77,7 +81,7 @@ typedef struct logger_context_mgr
     //     char log_write_buffer[LOG_WRITE_BUFFER_SIZE];
     // } write_buffer;
 
-    task_t *_log_writter;
+    task_t *_log_writer;
     logger_context_t * contexts[ MAX_LOGGER_CONTEXTS ];
 }logger_context_mgr_t;
 
@@ -99,14 +103,18 @@ static const log_level logger_context_mgr_get_log_level( logger_t * );
 static logger_ret_type logger_context_create( logger_context_t**, const logger_params_t* );
 static logger_ret_type logger_context_init( logger_context_t*, const logger_params_t* );
 static bool logger_context_ready_to_write( logger_context_t* );
+static void logger_context_set_log_level( logger_context_t*, const log_level );
+static log_level logger_context_get_log_level( logger_context_t* );
+static bool logger_context_open_file(logger_context_t *);
+static bool logger_context_close_file(logger_context_t *);
 static void logger_context_append_log( logger_context_t*, log_entry_t * );
-static void logger_context_write( logger_context_t* );
+static void logger_context_write_log( logger_context_t* );
 static logger_ret_type logger_context_deinit( logger_context_t* );
 static logger_ret_type logger_context_destroy( logger_context_t** );
 
 static const char* log_level_to_str( const log_level level);
 
-static uint32_t log_entry_to_str( const log_entry_t * entry, char *out_buf, u_int32_t size );
+static uint32_t log_entry_to_str( const log_entry_t * entry, char *out_buf, uint32_t size );
 
 static uint8_t default_timestamp_formatter( const log_timestamp_t* timestamp, char *out_buf, uint8_t size );
 static void logger_writer_routine( void * arg );
@@ -120,7 +128,7 @@ static atomic_bool s_context_mgr_initialized = false;
 static atomic_bool s_context_mgr_active = false;
 static atomic_bool s_context_mgr_stop_requested = false;
 static pthread_cond_t s_context_mgr_cv = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t s_context_mgr_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t s_context_mgr_lock = PTHREAD_RWLOCK_INITIALIZER;
 static logger_context_mgr_t s_context_mgr;
 static task_params_t s_context_task_params = 
 {
@@ -143,16 +151,16 @@ static void logger_context_mgr_init(  )
         // initialized contexts
         for( uint8_t i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
         {
-            _LOCK(s_context_mgr_lock)
+            WR_LOCK(s_context_mgr_lock)
             {
                 s_context_mgr.contexts[i] = NULL;
             }   
-            _UNLOCK(s_context_mgr_lock)
+            RW_UNLOCK(s_context_mgr_lock)
         }
 
         // Start writer thread
-        s_context_mgr._log_writter = task_create( &s_context_task_params );
-        task_start( s_context_mgr._log_writter );
+        s_context_mgr._log_writer = task_create( &s_context_task_params );
+        task_start( s_context_mgr._log_writer );
 
         s_context_mgr_initialized = true;
     }
@@ -170,7 +178,7 @@ static void logger_context_mgr_deinit( )
         
         for( uint8_t i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
         {
-            _LOCK(s_context_mgr_lock)
+            WR_LOCK(s_context_mgr_lock)
             {
                 if( s_context_mgr.contexts[i] )
                 {
@@ -178,11 +186,12 @@ static void logger_context_mgr_deinit( )
                     s_context_mgr.contexts[i] = NULL;
                 }
             }   
-            _UNLOCK(s_context_mgr_lock)
+            RW_UNLOCK(s_context_mgr_lock)
         }
         
-        task_stop( s_context_mgr._log_writter );
-        task_destroy( s_context_mgr._log_writter );
+        task_stop( s_context_mgr._log_writer );
+        task_destroy( s_context_mgr._log_writer );
+        s_context_mgr._log_writer = NULL;
         
         s_context_mgr_initialized = false;
         s_context_mgr_stop_requested = false;
@@ -196,7 +205,7 @@ static logger_ret_type logger_context_mgr_register_context( logger_t *logger, co
     uint8_t i;
     logger_ret_type ret;
     
-    _LOCK( s_context_mgr_lock )
+    WR_LOCK( s_context_mgr_lock )
     {
         // Find available slot and instantiate context
         for( i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
@@ -208,14 +217,23 @@ static logger_ret_type logger_context_mgr_register_context( logger_t *logger, co
         if( i < MAX_LOGGER_CONTEXTS )
         {
             logger->context_id = i;
+            
             ret = logger_context_create( &(s_context_mgr.contexts[i]), params );
+
+            if( ret != LOGGER_SUCCESS )
+            {
+                printf("logger_context_mgr_register_context(%u) %s\n",
+                    i,
+                    log_ret_type_str( ret)
+                );
+            }
         }
         else
         {
             ret = LOGGER_INIT_FAILED_CONTEXT_LIMIT_HIT;
         }        
     }
-    _UNLOCK( s_context_mgr_lock )
+    RW_UNLOCK( s_context_mgr_lock )
 
     return ret;
 }
@@ -225,7 +243,7 @@ static logger_ret_type logger_context_mgr_unregister_context( logger_t * logger 
     uint8_t i;
     logger_context_t* context;
 
-    _LOCK( s_context_mgr_lock )
+    WR_LOCK( s_context_mgr_lock )
     {
         i = logger->context_id;
 
@@ -233,16 +251,16 @@ static logger_ret_type logger_context_mgr_unregister_context( logger_t * logger 
         
         if( context )
         {
-            _LOCK( context->lock )
+            // _LOCK( context->lock )
             {
                 logger_context_destroy( &context );
             }
-            _UNLOCK( context->lock )
+            // _UNLOCK( context->lock )
         }
 
         s_context_mgr.contexts[i] = NULL;
     }
-    _UNLOCK( s_context_mgr_lock )
+    RW_UNLOCK( s_context_mgr_lock )
 
     logger->context_id = INVALID_LOGGER_CONTEXT_ID;
 
@@ -254,22 +272,19 @@ static logger_ret_type logger_context_mgr_append_log( logger_t * logger, log_ent
     uint8_t i;
     logger_context_t* context;
 
-    _LOCK( s_context_mgr_lock )
+    RD_LOCK( s_context_mgr_lock )
     {
         i = logger->context_id;
-
+        
+        
         context = s_context_mgr.contexts[i];
         
         if( context )
         {
-            _LOCK( context->lock )
-            {
-                logger_context_append_log( context, entry );
-            }
-            _UNLOCK( context->lock )
+            logger_context_append_log( context, entry );
         }
     }
-    _UNLOCK( s_context_mgr_lock )
+    RW_UNLOCK( s_context_mgr_lock )
 
     return LOGGER_SUCCESS;
 }
@@ -279,7 +294,7 @@ static void logger_context_mgr_set_log_level( logger_t *logger, log_level level 
     uint8_t i;
     logger_context_t* context;
 
-    _LOCK( s_context_mgr_lock )
+    RD_LOCK( s_context_mgr_lock )
     {
         i = logger->context_id;
 
@@ -287,14 +302,10 @@ static void logger_context_mgr_set_log_level( logger_t *logger, log_level level 
         
         if( context )
         {
-            _LOCK( context->lock )
-            {
-                context->level = level;
-            }
-            _UNLOCK( context->lock )
+            logger_context_set_log_level(context, level);
         }
     }
-    _UNLOCK( s_context_mgr_lock )
+    RW_UNLOCK( s_context_mgr_lock )
 
 }
 
@@ -304,7 +315,7 @@ static const log_level logger_context_mgr_get_log_level( logger_t *logger )
     log_level level = LOG_LEVEL_DEFAULT;
     logger_context_t* context;
 
-    _LOCK( s_context_mgr_lock )
+    RD_LOCK( s_context_mgr_lock )
     {
         i = logger->context_id;
 
@@ -312,14 +323,10 @@ static const log_level logger_context_mgr_get_log_level( logger_t *logger )
         
         if( context )
         {
-            _LOCK( context->lock )
-            {
-                level = context->level;
-            }
-            _UNLOCK( context->lock )
+            level = logger_context_get_log_level(context);
         }
     }
-    _UNLOCK( s_context_mgr_lock )
+    RW_UNLOCK( s_context_mgr_lock )
 
     return level;
 }
@@ -389,7 +396,7 @@ static void logger_context_append_log( logger_context_t* context, log_entry_t * 
 {
     _LOCK( context->lock )
     {
-        sync_cir_buffer_write( context->entry_queue, (const char*)&entry, sizeof(log_entry_t), false );
+        sync_cir_buffer_write( context->entry_queue, (const char*)entry, sizeof(log_entry_t), false );
     }
     _UNLOCK( context->lock )
 }
@@ -400,14 +407,103 @@ static bool logger_context_ready_to_write( logger_context_t* context )
 
     _LOCK( context->lock )
     {
-        ret = sync_cir_buffer_is_empty( context->entry_queue ) == false;
+        ret = (sync_cir_buffer_is_empty( context->entry_queue ) == false);
     }
     _UNLOCK( context->lock )
 
     return ret;
 }
 
-static void logger_context_write( logger_context_t* context )
+static void logger_context_set_log_level( logger_context_t* context, const log_level level )
+{
+    // _LOCK( context->lock )
+    {
+        context->level = level;
+    }
+    // _UNLOCK( context->lock )
+}
+
+static log_level logger_context_get_log_level( logger_context_t* context)
+{
+    log_level ret;
+
+    // _LOCK( context->lock )
+    {
+        ret = context->level;
+    }
+    // _UNLOCK( context->lock )
+
+    return ret;
+}
+
+
+static bool logger_context_open_file(logger_context_t *context)
+{
+    file_io_ret_type res = true;
+    bool ret = true;
+
+    if( context->file.opened == false )
+    {
+        log_timestamp_t timestamp;
+        char timestamp_str[50];
+        char filename_with_ext[LOG_FNAME_LEN];
+
+        update_timestamp( &timestamp );
+        context->timestamp_formatter( &timestamp, timestamp_str, 50 );
+
+        snprintf( filename_with_ext, LOG_FNAME_LEN, "%s_%s.%s",
+            context->log_fname,
+            timestamp_str,
+            context->log_fname_ext
+        );
+        
+        res = file_init( &context->file, FILE_T_ASCII, FILE_OP_MASK_APPEND, context->log_path, filename_with_ext );
+        if( res != FILE_IO_RET_TYPE__SUCCESS )
+        {
+            printf("File Intialization failed : %s\n", file_io_ret_str(res) );
+            ret = false;
+        }
+        
+        res = file_open( &(context->file) );
+        if( res != FILE_IO_RET_TYPE__SUCCESS )
+        {
+            printf("File open failed : %s\n", file_io_ret_str(res) );
+            ret = false;
+        }
+    }
+
+    return ret;
+}
+
+static bool logger_context_close_file(logger_context_t *context)
+{
+    bool ret = true;
+    file_io_ret_type res = true;
+
+    if( context->file.opened )
+    {
+        res = file_close( &context->file );
+       
+        if( res != FILE_IO_RET_TYPE__SUCCESS )
+        {
+            printf("File close failed : %s\n", file_io_ret_str(res) );
+            ret = false;
+        }
+
+        res = file_deinit( &context->file );
+
+        if( res != FILE_IO_RET_TYPE__SUCCESS )
+        {
+            printf("File deinit failed : %s\n", file_io_ret_str(res) );
+            ret = false;
+        }
+    }
+
+    return ret;
+}
+
+
+static void logger_context_write_log( logger_context_t* context )
 {
     log_entry_t entry;
     char write_buffer[ LOG_ENTRY_STR_LEN];
@@ -426,31 +522,24 @@ static void logger_context_write( logger_context_t* context )
             {
                 if( file->chars.wr >= context->max_file_size )
                 {
-                    char timestamp_str[50];
-                    char filename_with_ext[LOG_FNAME_LEN];
-                    
-                    // Get formatted timestamp
-                    context->timestamp_formatter( &(entry.timestamp), timestamp_str, 50 );
+                    if(logger_context_close_file(context) == false)
+                    {
+                        exit(-1);
+                    }
 
-                    // Close the file and reopen
-                    snprintf( filename_with_ext, LOG_FNAME_LEN, "%s_%s.%s",
-                        context->log_fname,
-                        timestamp_str,
-                        context->log_fname_ext
-                    );
-
-                    file_close( file );
-                    file_deinit( file );
-                    
-                    file_init( file, FILE_T_ASCII, FILE_OP_MASK_APPEND, context->log_path, filename_with_ext );
-
-                    file_open( file );
+                    if(logger_context_open_file(context) == false)
+                    {
+                        exit(-1);
+                    }
                 }
             }
             else
             {
                 // open for writing
-                file_open( file );
+                if(logger_context_open_file(context) == false)
+                {
+                    exit(-1);
+                }
             }
 
             // write to the file
@@ -518,12 +607,12 @@ static const char* log_level_to_str( const log_level level)
     }
 }
 
-static uint32_t log_entry_to_str( const log_entry_t * entry, char *out_buf, u_int32_t size )
+static uint32_t log_entry_to_str( const log_entry_t * entry, char *out_buf, uint32_t size )
 {
     char timestamp_str[50];
     default_timestamp_formatter( &entry->timestamp, timestamp_str, sizeof(timestamp_str) );
 
-    int ret = snprintf( out_buf, size, "[%s] %s : %s",
+    int ret = snprintf( out_buf, size, "[%s] %s : %s\n",
         timestamp_str,
         log_level_to_str( entry->level ),
         entry->msg
@@ -561,24 +650,19 @@ static void logger_writer_routine( void * arg )
         // iterate over the contexts and check if there's data available
         for( uint8_t i = 0; i < MAX_LOGGER_CONTEXTS; i++ )
         {
-            _LOCK( s_context_mgr_lock )
+            RD_LOCK( s_context_mgr_lock )
             {
                 c_ctxt = s_context_mgr.contexts[i];
                 
                 if( c_ctxt )
                 {
-                    _LOCK(c_ctxt->lock)
+                    while( logger_context_ready_to_write(c_ctxt) )
                     {
-                        if( logger_context_ready_to_write(c_ctxt) )
-                        {
-                            logger_context_write( c_ctxt );
-                            
-                        }
+                        logger_context_write_log( c_ctxt );
                     }
-                    _UNLOCK(c_ctxt->lock)
                 }
             }
-            _UNLOCK( s_context_mgr_lock )
+            RW_UNLOCK( s_context_mgr_lock )
             
         }
     }
@@ -633,19 +717,38 @@ log_level log_get_level( logger_t* logger )
     return logger_context_mgr_get_log_level( logger);
 }
 
+const char * log_ret_type_str( const logger_ret_type type )
+{
+    switch(type)
+    {
+        case LOGGER_SUCCESS: return "Success";
+        case LOGGER_INIT_FAILED_CONTEXT_LIMIT_HIT: return "Context count limit hit";
+        case LOGGER_INIT_FAILED_EXCEEDED_FNAME_LIMIT: return "Filename size limit exceeded";
+        case LOGGER_INIT_FAILED_EXCEEDED_FNAME_EXT_LIMIT: return "Filename extension size limit exceeded";
+        case LOGGER_INIT_FAILED_EXCEEDED_PATH_LIMIT: return "Path Limit exeeded";
+        case LOGGER_INIT_FAILED: 
+        default:
+            return "Unknown failure";
+    }
+}
+
 logger_ret_type log_trace( logger_t* logger, const char * msg, ... )
 {
     log_entry_t entry;
 
-    va_list args;
-    va_start( args, msg );
-    vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
-    va_end( args );
+    if( log_get_level(logger) <= LOG_LEVEL_TRACE )
+    {
+        va_list args;
+        va_start( args, msg );
+        vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
+        va_end( args );
     
-    entry.level = LOG_LEVEL_TRACE;
-    update_timestamp( &entry.timestamp );
+        entry.level = LOG_LEVEL_TRACE;
+        update_timestamp( &entry.timestamp );
+    
+        logger_context_mgr_append_log( logger, &entry );
+    }
 
-    logger_context_mgr_append_log( logger, &entry );
 
     return LOGGER_SUCCESS;
 }
@@ -654,15 +757,18 @@ logger_ret_type log_debug( logger_t* logger, const char * msg, ... )
 {
     log_entry_t entry;
 
-    va_list args;
-    va_start( args, msg );
-    vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
-    va_end( args );
+    if( log_get_level(logger) <= LOG_LEVEL_DEBUG )
+    {
+        va_list args;
+        va_start( args, msg );
+        vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
+        va_end( args );
+        
+        entry.level = LOG_LEVEL_DEBUG;
+        update_timestamp( &entry.timestamp );
     
-    entry.level = LOG_LEVEL_DEBUG;
-    update_timestamp( &entry.timestamp );
-
-    logger_context_mgr_append_log( logger, &entry );
+        logger_context_mgr_append_log( logger, &entry );
+    }
 
     return LOGGER_SUCCESS;
 }
@@ -671,15 +777,18 @@ logger_ret_type log_info( logger_t* logger, const char * msg, ... )
 {
     log_entry_t entry;
 
-    va_list args;
-    va_start( args, msg );
-    vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
-    va_end( args );
+    if( log_get_level(logger) <= LOG_LEVEL_INFO )
+    {
+        va_list args;
+        va_start( args, msg );
+        vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
+        va_end( args );
+        
+        entry.level = LOG_LEVEL_INFO;
+        update_timestamp( &entry.timestamp );
     
-    entry.level = LOG_LEVEL_INFO;
-    update_timestamp( &entry.timestamp );
-
-    logger_context_mgr_append_log( logger, &entry );
+        logger_context_mgr_append_log( logger, &entry );
+    }
 
     return LOGGER_SUCCESS;
 }
@@ -688,15 +797,18 @@ logger_ret_type log_error( logger_t* logger, const char * msg, ... )
 {
     log_entry_t entry;
 
-    va_list args;
-    va_start( args, msg );
-    vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
-    va_end( args );
+    if( log_get_level(logger) <= LOG_LEVEL_ERROR )
+    {
+        va_list args;
+        va_start( args, msg );
+        vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
+        va_end( args );
+        
+        entry.level = LOG_LEVEL_ERROR;
+        update_timestamp( &entry.timestamp );
     
-    entry.level = LOG_LEVEL_ERROR;
-    update_timestamp( &entry.timestamp );
-
-    logger_context_mgr_append_log( logger, &entry );
+        logger_context_mgr_append_log( logger, &entry );
+    }
 
     return LOGGER_SUCCESS;
 }
@@ -705,15 +817,18 @@ logger_ret_type log_fatal( logger_t* logger, const char * msg, ... )
 {
     log_entry_t entry;
 
-    va_list args;
-    va_start( args, msg );
-    vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
-    va_end( args );
+    if( log_get_level(logger) <= LOG_LEVEL_FATAL )
+    {
+        va_list args;
+        va_start( args, msg );
+        vsnprintf( entry.msg, LOG_MSG_LEN, msg, args );
+        va_end( args );
+        
+        entry.level = LOG_LEVEL_FATAL;
+        update_timestamp( &entry.timestamp );
     
-    entry.level = LOG_LEVEL_FATAL;
-    update_timestamp( &entry.timestamp );
-
-    logger_context_mgr_append_log( logger, &entry );
+        logger_context_mgr_append_log( logger, &entry );
+    }
 
     return LOGGER_SUCCESS;
 }

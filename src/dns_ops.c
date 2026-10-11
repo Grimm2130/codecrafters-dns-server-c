@@ -289,7 +289,7 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
                 }
                 else
                 {
-                    printf("Copying len : %u\n", len );
+                    // printf("Copying len : %u\n", len );
 
                     label_len = dns_label_deserialize(
                         curr_label, 
@@ -297,7 +297,7 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
                         net_serializer_get_size( &serializer )
                     );
             
-                    printf("\tLabel: %s\n", dns_label_str(curr_label));
+                    // printf("\tLabel: %s\n", dns_label_str(curr_label));
                     
                     // remove the label entry
                     net_serializer_remove_raw( &serializer, 0, NULL, label_len );
@@ -321,7 +321,7 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
     }
     while( len );
 
-    printf("Done\n");
+    // printf("Done\n");
 
     if( net_serializer_remove_u16(&serializer, 0, &query->qtype, 1 )  )
     {

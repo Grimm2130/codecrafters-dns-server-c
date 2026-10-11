@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 
+add_compile_options("-g")
+
 project(codecrafters-dns-server)
 
 include_directories(

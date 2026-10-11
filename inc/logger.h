@@ -15,7 +15,7 @@ typedef enum _logger_ret_type
     LOGGER_INIT_FAILED_EXCEEDED_FNAME_LIMIT,
     LOGGER_INIT_FAILED_EXCEEDED_FNAME_EXT_LIMIT,
     LOGGER_INIT_FAILED_EXCEEDED_PATH_LIMIT,
-    LOGGER_INIT_FAILED_
+    LOGGER_INIT_FAILED
 } logger_ret_type;
 
 /// @brief Log level
@@ -51,9 +51,9 @@ typedef struct logger_params
 void logger_init( );
 void logger_deinit( );
 logger_ret_type logger_get_instance( logger_t *, const logger_params_t* );
-// logger_ret_type logger_log( logger_t*, const log_level level, const char * msg );
 void log_set_level( logger_t*, log_level );
 log_level log_get_level( logger_t* );
+const char * log_ret_type_str( const logger_ret_type );
 logger_ret_type log_trace( logger_t*, const char * msg, ... );
 logger_ret_type log_debug( logger_t*, const char * msg, ... );
 logger_ret_type log_info( logger_t*, const char * msg, ... );

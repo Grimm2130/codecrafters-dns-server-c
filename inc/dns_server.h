@@ -4,6 +4,7 @@
 #define DNS_PORT 2053U
 #define DNS_IP   "0.0.0.0"
 
+void dns_server_main( int argc, char * argv []);
 void dns_service_start( const char * forwarding_addr );
 void dns_service_stop();
 
