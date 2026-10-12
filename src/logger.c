@@ -109,6 +109,7 @@ static bool logger_context_open_file(logger_context_t *);
 static bool logger_context_close_file(logger_context_t *);
 static void logger_context_append_log( logger_context_t*, log_entry_t * );
 static void logger_context_write_log( logger_context_t* );
+static void logger_context_flush_logs( logger_context_t* );
 static logger_ret_type logger_context_deinit( logger_context_t* );
 static logger_ret_type logger_context_destroy( logger_context_t** );
 
@@ -555,6 +556,22 @@ static void logger_context_write_log( logger_context_t* context )
     _UNLOCK( context->lock )
 }
 
+static void logger_context_flush_logs( logger_context_t* context )
+{
+    file_t * file;
+
+    _LOCK( context->lock )
+    {
+        file = &context->file;
+
+        if( file )
+        {
+            file_flush( file );
+        }
+    }
+    _UNLOCK( context->lock )
+}
+
 
 static logger_ret_type logger_context_deinit( logger_context_t* context )
 {
@@ -660,6 +677,7 @@ static void logger_writer_routine( void * arg )
                     {
                         logger_context_write_log( c_ctxt );
                     }
+                    logger_context_flush_logs( c_ctxt );
                 }
             }
             RW_UNLOCK( s_context_mgr_lock )

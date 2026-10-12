@@ -58,4 +58,5 @@ bin/
 test.log*
 
 .vscode
-.log
+logs
+*.log

@@ -325,6 +325,19 @@ file_io_ret_type file_close( file_t *fp)
     return ret;
 }
 
+file_io_ret_type file_flush( file_t *fp)
+{
+    if( fp )
+    {
+        if( fp->opened )
+        {
+            fflush( fp->file_ptr );
+        }
+    }
+
+    return FILE_IO_RET_TYPE__SUCCESS;
+}
+
 file_io_ret_type file_deinit( file_t *fp)
 {
     if( fp )

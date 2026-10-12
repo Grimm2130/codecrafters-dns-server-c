@@ -27,6 +27,7 @@ task_t g_transmitter;
 task_t g_resolver;
 udp_server_handle_t g_server_handle;
 udp_server_handle_t g_remote_resolver_handle;
+network_context_t g_resolver_network_context;
 sync_cir_buffer_t g_transmit_buffer;
 sync_cir_buffer_t g_resolver_transmit_buffer;
 net_serializer_t g_rxSerializer;
@@ -34,9 +35,13 @@ logger_t g_main_thread_logger;
 logger_params_t g_main_thread_logger_params = 
 {
     .level = LOG_LEVEL_TRACE,
+#ifdef RESOLVER
+    .log_fname = "main-resolver",
+#else
     .log_fname = "main",
+#endif
     .log_fname_ext = "log",
-    .log_path = "",
+    .log_path = "logs",
     .max_file_size = 1e6,
     .max_log_buf_enttry_cnt = 100,
     .prior = 10,
@@ -81,7 +86,6 @@ static void dns_process_msg__dns_question_host_addr_internet( const dns_question
 
 static void dns_process_msg__answer_host_addr_internet( dns_answer_t* answer, const char *domain_name, const char* ip_addr );
 
-
 // static uint32_t dns_request_deserialize_hdr(dns_hdr_t* hdr, const char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_hdr(dns_hdr_t *hdr, char *rply_buf, const uint32_t size);
@@ -122,15 +126,15 @@ static void init_remote_resolver_handle( const char * resolver_addr)
                 {
                     .client_allow_mask = -1,
                     .port = port,
-                    .rcv_to = 1e6
+                    .rcv_to = 1e6,
+                    .ip = ip
                 };
                 
-                strncpy( resolver_udp_handle_params.ip, ip, sizeof(resolver_udp_handle_params.ip)/sizeof(resolver_udp_handle_params.ip[0]));
-                
-                log_debug( &g_main_thread_logger, "Remote DNS Resolver @<%s>:<%u>\n", ip, port );
+                log_debug( &g_main_thread_logger, "Remote DNS Resolver @<%s>:<%u>", ip, port );
 
                 // initialize the IP address
-                udp_server_handle_init( &g_remote_resolver_handle, &resolver_udp_handle_params );
+                // udp_server_handle_init( &g_remote_resolver_handle, &resolver_udp_handle_params );
+                network_context_init( &g_resolver_network_context, ip, port );
             }
         }        
     }
@@ -146,9 +150,13 @@ static void dns_receiver_routine(void *arg)
     logger_params_t receiver_logger_params = 
     {
         .level = LOG_LEVEL_TRACE,
+#ifdef RESOLVER
+        .log_fname = "resolver-receiver",
+#else
         .log_fname = "receiver",
+#endif
         .log_fname_ext = "log",
-        .log_path = "",
+        .log_path = "logs",
         .max_file_size = 1e6,
         .max_log_buf_enttry_cnt = 100,
         .prior = 10,
@@ -169,7 +177,7 @@ static void dns_receiver_routine(void *arg)
 
             ip_n_to_str(htonl(received.context.addr.sin_addr.s_addr), ip, 20);
 
-            log_debug( &receiver_logger, "Receiver [%d] bytes to %s:%u {%s}\n", 
+            log_debug( &receiver_logger, "Receiver [%d] bytes to %s:%u {%s}", 
                 received.len, 
                 ip, 
                 htons(received.context.addr.sin_port),
@@ -201,9 +209,13 @@ static void dns_transmitter_routine(void *arg)
     logger_params_t transmitter_logger_params = 
     {
         .level = LOG_LEVEL_TRACE,
+#ifdef RESOLVER
+        .log_fname = "resolver-transmitter",
+#else
         .log_fname = "transmitter",
+#endif
         .log_fname_ext = "log",
-        .log_path = "",
+        .log_path = "logs",
         .max_file_size = 1e6,
         .max_log_buf_enttry_cnt = 100,
         .prior = 10,
@@ -217,7 +229,7 @@ static void dns_transmitter_routine(void *arg)
         dequeue_client_msg_for_rx(&to_transmit);
         ip_n_to_str(htonl(to_transmit.context.addr.sin_addr.s_addr), ip, 20);
 
-        log_debug(&transmitter_logger, ">>> Transmitting [%d] bytes to %s:%u {%s}\n", 
+        log_debug(&transmitter_logger, ">>> Transmitting [%d] bytes to %s:%u {%s}", 
             to_transmit.len, 
             ip, 
             htons(to_transmit.context.addr.sin_port),
@@ -244,95 +256,207 @@ static void dns_transmitter_routine(void *arg)
 
 static void dns_resolver_routine(void *arg)
 {
+    bool success;
     int bytes;
+    uint32_t serializer_off;
+
     char ip[20];
+    char answer_buf[255];
     char status_message[255];
-    udp_server_handle_t *resolver_handle = (udp_server_handle_t *)arg;
-    client_msg_t target_client_data;            // stores client info
+    
+    dns_hdr_t header;
+    dns_question_t question;
+    dns_answer_t answer;
+    
     client_msg_t resolver_data;               // stores resolver info
+    client_msg_t target_client_data;            // stores client info
+    
+    net_serializer_t serializer;
+    
+    cir_buffer_t questions;
+    cir_buffer_t answers;
+    
     logger_t resolver_logger;
+    
+    // udp_server_handle_t *resolver_handle = (udp_server_handle_t *)arg;
+    network_context_t *resolver_context = (network_context_t *)arg;
+    
     logger_params_t resolver_logger_params = 
     {
         .level = LOG_LEVEL_TRACE,
-        .log_fname = "transmitter",
         .log_fname_ext = "log",
-        .log_path = "",
-        .max_file_size = 1e6,
+#ifdef RESOLVER
+        .log_fname = "resolver-resolver",
+#else
+        .log_fname = "resolver",
+#endif
+        .log_path = "logs",
+        .max_file_size = 1e7,
         .max_log_buf_enttry_cnt = 100,
         .prior = 10,
         .timestamp_formatter = NULL
     };
 
     logger_get_instance( &resolver_logger, &resolver_logger_params );
+    net_serializer_init( &serializer );
+    cir_buffer_init( &questions, false );
+    cir_buffer_init( &answers, false );
+
+    // Set the network info for the resolver
+    memcpy( &resolver_data.context, resolver_context, sizeof(network_context_t));
+
+    printf("Here\n"); fflush(stdout);
+    
+    // Get the IP of the resolver
+    ip_n_to_str(htonl(resolver_data.context.addr.sin_addr.s_addr), ip, 20);
 
     while (g_runFlag)
     {
-        udp_server_handle_get_info(resolver_handle, status_message, 255);
+        serializer_off = 0;
 
-        log_debug( &resolver_logger, "Resolver handle: %s\n", status_message);
+        udp_server_handle_get_info(&g_server_handle, status_message, 255);
 
         // Check the queue for new data requested to be resolved
         dequeue_client_msg_for_resolver(&target_client_data);
-        
-        // update the message to target the resolver
-        memcpy( &resolver_data, &target_client_data, sizeof(client_msg_t) );
 
-        // Update the resolver address info
-        memcpy( &resolver_data.context, resolver_handle->context, sizeof(network_context_t));
-
-        // Log info in message
-        ip_n_to_str(htonl(resolver_data.context.addr.sin_addr.s_addr), ip, 20);
-        log_debug( &resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}\n", 
-            resolver_data.len, 
-            ip, 
-            htons(resolver_data.context.addr.sin_port),
-            client_msg_str(&resolver_data)
+        log_debug( &resolver_logger, "Dequeued [%d] bytes {%s}\n", 
+            target_client_data.len, 
+            client_msg_str(&target_client_data)
         );
+
+        // Append the raw data
+        net_serializer_append_raw( &serializer, target_client_data.data, target_client_data.len );
+
+        // Extract the header from the message
+        bytes = dns_hdr_deserialize( &header, target_client_data.data + serializer_off, target_client_data.len - serializer_off );
+        assert( bytes == DSN_HDR_SIZE );
+        serializer_off += bytes;
         
-        // transmit to the resolver
-        bytes = udp_server_handle_send(resolver_handle, &resolver_data);
+        log_debug( &resolver_logger, "Header: %s", dns_hdr_str( &header) );
+        
+        // Update the inner header that only carries enough info for one question
+        dns_hdr_t inner_header;
+        memcpy( &inner_header, &header, DSN_HDR_SIZE );
+        
+        inner_header.qd_count = 1;
 
-
-
-        if (bytes > 0)
+        // For each question request and answer
+        for( uint8_t i = 0; header.qd_count; i++ )
         {
-            resolver_handle->rt_info.written_bytes += bytes;
-            
-            // wait for data to return from the resolver
-            bytes = udp_server_handle_receive( resolver_handle, &resolver_data );
+            success = false;
+            uint16_t pointer = 0;
 
-            log_debug( &resolver_logger, ">>> [Resolver] Received [%d] bytes from %s:%u {%s}\n", 
+            // extract the question
+            bytes = dns_question_deserialize( &question, target_client_data.data + serializer_off, target_client_data.len - serializer_off, &pointer );
+            serializer_off += bytes;
+
+            // Handle compressed query
+            if( pointer )
+            {
+                // TODO: Do more work to resolve
+                log_fatal( &resolver_logger, "Compressed Querry encountered!!");
+                exit(-1);
+            }
+
+            log_debug( &resolver_logger, "Question(%u): %s", i, dns_question_str( &question) );
+
+            // serialize the header and question and transfer to the resolver
+            resolver_data.len = 0;
+            resolver_data.len += dns_hdr_serialize( &inner_header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
+            resolver_data.len += dns_question_serialize( &question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
+            
+            log_debug( &resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}", 
                 resolver_data.len, 
                 ip, 
                 htons(resolver_data.context.addr.sin_port),
                 client_msg_str(&resolver_data)
             );
             
-            if (bytes > 0)
-            {
-                resolver_handle->rt_info.read_bytes += bytes;
-                
-                // Copy the data back to the client data
-                memcpy( target_client_data.data, resolver_data.data, bytes);
-                target_client_data.len = bytes;
+            bytes = udp_server_handle_send(&g_server_handle, &resolver_data);
 
-                // Append the result to the transmit buffer
-                enqueue_client_msg_for_tx( &target_client_data );
-            }
-            else if( bytes == 0 )
+            // Successful transmit
+            if( bytes > 0 )
             {
-                resolver_handle->rt_info.read_timeouts++;
+                g_server_handle.rt_info.written_bytes++;
+
+                // receive data back from the resolver
+                bytes = udp_server_handle_receive( &g_server_handle, &resolver_data );
+
+                // received valid data
+                log_trace( &resolver_logger, "Successfully received %d bytes from the resolver");
+
+                if( bytes > 0 )
+                {
+                    g_server_handle.rt_info.read_bytes += bytes;
+
+                    bytes = dns_hdr_deserialize(  &inner_header, resolver_data.data, resolver_data.len );
+                    assert( bytes ==  DSN_HDR_SIZE );
+
+                    // extract the question
+                    bytes += dns_question_deserialize( &question, resolver_data.data + bytes, resolver_data.len - bytes, &pointer );
+                    
+                    // extract the answer
+                    bytes += dns_answer_deserialize( &answer, resolver_data.data + bytes, resolver_data.len - bytes );
+
+                    // Append question and answer to their queues
+                    cir_buffer_write( &questions, (const char*)&question, sizeof(dns_question_t) );
+                    cir_buffer_write( &answers, (const char*)&answer, sizeof(dns_answer_t) );
+                    success = true;
+                }
+                else if( bytes == 0 )
+                {
+                    log_error( &resolver_logger, "Transmit to resolver timed out" );
+                    g_server_handle.rt_info.read_timeouts++;
+                    break;
+                }
+                else
+                {
+                    log_error( &resolver_logger, "Transmit to resolver failed with. Returned %u bytes", bytes );
+                    g_server_handle.rt_info.invalid_receives++;
+                    break;
+                }
             }
+            // invalid transmits
             else
             {
-                resolver_handle->rt_info.read_timeouts++;
+                log_error( &resolver_logger, "Transmit to resolver failed with. Returned %u bytes - %s", bytes, strerror(errno) );
+                
+                if( bytes < 0 )
+                {
+                    g_server_handle.rt_info.invalid_transmits++;
+                }
+
+                break;
             }
+        }
+
+        if( success )
+        {
+            while( cir_buffer_is_empty( &answers ) == false )
+            {
+                // remove from queue
+                cir_buffer_read( &answers, (char*)&answer, sizeof(dns_answer_t) );
+    
+                // Serialize answer and append to buffer
+                bytes = dns_answer_serialize( &answer, answer_buf, 255 );
+                net_serializer_append_raw( &serializer, answer_buf, bytes );
+            }
+    
+            // pass to the transmitter
+            memcpy( target_client_data.data, net_serializer_getbuf( &serializer ), net_serializer_get_size(&serializer) );
+            target_client_data.len = net_serializer_get_size(&serializer);
+    
+            
+            log_info( &resolver_logger, "Passing resolved data back to client");
+            
+            enqueue_client_msg_for_tx( &target_client_data );
         }
         else
         {
-            resolver_handle->rt_info.invalid_transmits++;
-            //
+            log_error( &resolver_logger, "Error processing packet. Dropping...");
         }
+
+        net_serializer_clear( &serializer );
     }
 
     logger_release_instance( &resolver_logger );
@@ -352,8 +476,8 @@ void dns_server_main( int argc, char * argv [])
 	{
         resolver_addr = argv[2];
 	}
-    
-	
+
+
     // initialize the logger
     logger_init();
 
@@ -376,7 +500,6 @@ void dns_server_main( int argc, char * argv [])
 
 void dns_service_start( const char * forwarding_addr )
 {
-
 
     if( forwarding_addr )
     {
@@ -415,7 +538,7 @@ void dns_service_start( const char * forwarding_addr )
         .can_join = true,
         .prio = 10,
         .stack_size = 1e6,
-        .arg = (void *)(&g_remote_resolver_handle),
+        .arg = (void *)(&g_resolver_network_context),
         .fn = dns_resolver_routine
     };
 
@@ -423,9 +546,10 @@ void dns_service_start( const char * forwarding_addr )
     udp_server_handle_params_t udp_server_handle_param = {
         .client_allow_mask = (uint32_t)(-1),
         .port = DNS_PORT,
-        .rcv_to = (uint32_t)1e6
+        .rcv_to = (uint32_t)1e6,
+        .ip = DNS_IP
     };
-
+    
     udp_server_handle_init(&g_server_handle, &udp_server_handle_param);
 
     // initialize rx & tx tasks
@@ -452,8 +576,7 @@ void dns_service_start( const char * forwarding_addr )
     while (1)
     {
         udp_server_handle_get_info(&g_server_handle, server_status, 200);
-        log_info( &g_main_thread_logger, "Server Status : %s\n", server_status);
-
+        log_info( &g_main_thread_logger, "Server Status : %s", server_status);
         sleep(3);
     }
 }
@@ -482,7 +605,7 @@ static void dns_handle_new_client_data(client_msg_t *msg)
         ip_n_to_str(ntohl(msg->context.addr.sin_addr.s_addr), client_ip_addr, 20);
         client_port = ntohs(msg->context.addr.sin_port);
     
-        log_debug( &g_main_thread_logger, ">>> Received [%d] bytes from %s:%u {%s}\n", 
+        log_debug( &g_main_thread_logger, ">>> Received [%d] bytes from %s:%u {%s}", 
             msg->len, 
             client_ip_addr, 
             client_port,
@@ -555,7 +678,7 @@ static void dns_process_msg()
     // Copy validate the header data deserialized
     if( bytes == DSN_HDR_SIZE )
     {
-        log_debug( &g_main_thread_logger, "[Request] Header %s\n", dns_hdr_str( &g_hdr ) );
+        log_debug( &g_main_thread_logger, "[Request] Header %s", dns_hdr_str( &g_hdr ) );
 
         // remove raw data from the serializer
         net_serializer_remove_raw( &g_rxSerializer, 0, NULL, DSN_HDR_SIZE );
@@ -636,7 +759,7 @@ static void dns_process_msg__dns_hdr_valid( dns_hdr_t* hdr )
         case DNS_HEADER_TYPE__RESPONSE:
         default:
         {
-            log_debug( &g_main_thread_logger, "[ERROR] Unhandled header type\n");
+            log_debug( &g_main_thread_logger, "[ERROR] Unhandled header type");
             g_hdr.rcode = DNS_HEADER_RCODE__NOT_IMPLEMENTED;
         }
         break;
@@ -659,7 +782,7 @@ static void dns_process_msg__dns_hdr_valid_query( dns_hdr_t* hdr )
         case DNS_HEADER_OPCODE__SERVER_STATUS_REQUEST:
         default:
         {
-            log_debug( &g_main_thread_logger, "[ERROR] Unhandled header opcode\n");
+            log_debug( &g_main_thread_logger, "[ERROR] Unhandled header opcode");
             g_hdr.rcode = DNS_HEADER_RCODE__NOT_IMPLEMENTED;
         }
         break;
@@ -730,13 +853,13 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
             {
                 uint16_t l_idx = 0;
                 
-                log_debug( &g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u\n", offset, c_pointer );
+                log_debug( &g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u", offset, c_pointer );
 
                 cir_buffer_read( &temp_questions, (char*)&temp_question, sizeof(dns_question_t));
                 
                 while( (l_idx < temp_question.label_cnt) && offset < c_pointer )
                 {
-                    log_debug( &g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u\n", offset, c_pointer );
+                    log_debug( &g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u", offset, c_pointer );
                     // increment the offset
                     offset += sizeof(temp_question.qname[l_idx].len);       // label len
                     offset += temp_question.qname[l_idx].len;               // label content
@@ -780,7 +903,7 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
 
         if( bytes )
         {
-            log_debug( &g_main_thread_logger, "[Request] [Question] ([%u] bytes) %s\n", bytes, dns_question_str(&question) );
+            log_debug( &g_main_thread_logger, "[Request] [Question] ([%u] bytes) %s", bytes, dns_question_str(&question) );
 
             cir_buffer_write( &g_questions, (const char*)&question, sizeof(dns_question_t)) ;
 
@@ -801,7 +924,7 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
         else
         {
             // A compressed question has been returned
-            log_debug( &g_main_thread_logger, "Cannot handle compressed label\n");
+            log_debug( &g_main_thread_logger, "Cannot handle compressed label");
             exit(-1);
 
         }
@@ -813,7 +936,7 @@ static void dns_process_msg__dns_hdr_questions( dns_hdr_t* hdr )
 
 static void dns_process_msg__dns_question( const dns_question_t* question, dns_answer_t* answer )
 {
-    log_debug( &g_main_thread_logger, "Processing Quesstion\n");
+    log_debug( &g_main_thread_logger, "Processing Quesstion");
     
     switch((DNS_RR_TYPE)question->qtype)
     {
@@ -838,11 +961,11 @@ static void dns_process_msg__dns_question( const dns_question_t* question, dns_a
         case DNS_RR_TYPE__MX:
         case DNS_RR_TYPE__TXT:
         default:
-        log_debug( &g_main_thread_logger, "[INFO] unknown QUESTION type received\n");
+        log_debug( &g_main_thread_logger, "[INFO] unknown QUESTION type received");
         break;
     }
     
-    log_debug( &g_main_thread_logger, "Processing Quesstion...\n");
+    log_debug( &g_main_thread_logger, "Processing Quesstion...");
 
 }
 
@@ -901,7 +1024,7 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
     dns_question_t question;
     dns_answer_t answer;
 
-    log_debug( &g_main_thread_logger, "Serializing Response...\n");
+    log_debug( &g_main_thread_logger, "Serializing Response...");
 
     memset(g_dns_section_buffer, 0, DNS_SECTION_BUFFER_SIZE);
 
@@ -912,7 +1035,7 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
     {
         assert( cir_buffer_read( &g_questions, (char*)&question, sizeof(dns_question_t) ) == sizeof(dns_question_t) );
         bytes += dns_question_serialize( &question, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes );
-        log_debug( &g_main_thread_logger, "[Response] Question %s\n", dns_question_str(&question));
+        log_debug( &g_main_thread_logger, "[Response] Question %s", dns_question_str(&question));
         g_hdr.qd_count++;
     }
     
@@ -922,7 +1045,7 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
     {
         assert( cir_buffer_read( &g_answers, (char*)&answer, sizeof(dns_answer_t) ) == sizeof(dns_answer_t) );
         bytes += dns_answer_serialize( &answer, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes );
-        log_debug( &g_main_thread_logger, "[Response] Answer %s\n", dns_answer_str(&answer));
+        log_debug( &g_main_thread_logger, "[Response] Answer %s", dns_answer_str(&answer));
         g_hdr.an_count++;
     }
 
@@ -931,7 +1054,7 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
     // insert the header at the front
     dns_hdr_serialize( &g_hdr, g_dns_section_buffer, DSN_HDR_SIZE );
 
-    log_debug( &g_main_thread_logger, "[Response] Header %s\n", dns_hdr_str( &g_hdr ));
+    log_debug( &g_main_thread_logger, "[Response] Header %s", dns_hdr_str( &g_hdr ));
 
     memcpy(rply_buf, g_dns_section_buffer, bytes );
 
@@ -959,7 +1082,7 @@ static uint32_t dns_reply_serialize_hdr(dns_hdr_t *hdr, char *rply_buf, const ui
     // copy header info
     memset(rply_buf, 0, DSN_HDR_SIZE);
 
-    log_debug( &g_main_thread_logger, "Serialized Header: %s\n", dns_hdr_str(hdr));
+    log_debug( &g_main_thread_logger, "Serialized Header: %s", dns_hdr_str(hdr));
 
     return dns_hdr_serialize(hdr, rply_buf, size);
 }
@@ -972,7 +1095,7 @@ static uint32_t dns_reply_serialize_question(dns_question_t *question, char *rpl
     // dns_question_t question;
     // dns_question_init_as_domain_name( &question, domain_name, domain_name_len );
 
-    log_debug( &g_main_thread_logger, "Serialized Question: %s\n", dns_question_str(question));
+    log_debug( &g_main_thread_logger, "Serialized Question: %s", dns_question_str(question));
 
     return dns_question_serialize(question, rply_buf, size);
 }
@@ -987,7 +1110,7 @@ static uint32_t dns_reply_serialize_answer(dns_answer_t *answer, char *rply_buf,
 
     // dns_answer_init_from_domain_name_with_desc( &answer, domain_name, domain_name_len, 60, (const char*)&desc, desc_len );
 
-    log_debug( &g_main_thread_logger, "Serialized Answer: %s\n", dns_answer_str(answer));
+    log_debug( &g_main_thread_logger, "Serialized Answer: %s", dns_answer_str(answer));
 
     return dns_answer_serialize(answer, rply_buf, size);
 }

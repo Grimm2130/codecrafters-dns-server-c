@@ -26,4 +26,7 @@ file(GLOB TESTS_FILES
 set(CMAKE_C_STANDARD 23) # Enable the C23 standard
 
 add_executable(dns-server ${SOURCE_FILES})
+add_executable(dns-server-resolver ${SOURCE_FILES})
 add_executable(test-runner ${TESTS_FILES})
+
+target_compile_definitions(dns-server-resolver PUBLIC "-DRESOLVER=1")

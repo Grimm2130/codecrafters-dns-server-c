@@ -90,6 +90,7 @@ file_io_ret_type file_read_binary( file_t *, char *, uint32_t, uint32_t*);
 file_io_ret_type file_write_ascii( file_t *, const char *, uint32_t );
 file_io_ret_type file_write_binary( file_t *, const char *, uint32_t, uint32_t* );
 file_io_ret_type file_close( file_t *);
+file_io_ret_type file_flush( file_t *);
 file_io_ret_type file_deinit( file_t *);
 file_io_ret_type file_release( file_t **);
 const char *file_io_ret_str( file_io_ret_type );

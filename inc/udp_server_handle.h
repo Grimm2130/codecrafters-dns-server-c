@@ -60,7 +60,7 @@ typedef struct udp_server_handle_params
     uint16_t port;              // port
     uint32_t client_allow_mask; // client allow mask
     uint32_t rcv_to;            // receiver timeout
-    char ip[IP_ADDR_LEN + 1];   // ip address
+    char *ip;                   // ip address
 } udp_server_handle_params_t;
 
 udp_server_handle_t *udp_server_handle_create(udp_server_handle_params_t *);
