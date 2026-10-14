@@ -104,7 +104,7 @@ iters  = 0
 
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
 
-    sock.settimeout(1)
+    sock.settimeout(0.001)
 
     messages = [
         DNSHeader(
@@ -166,5 +166,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         except:
             print("Timeout occured")
 
-        time.sleep(1)
+        # time.sleep(0.001)
         iters += 1

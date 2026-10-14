@@ -33,4 +33,6 @@ if("$ENV{USER}" STREQUAL "chimaochiagha")
     target_compile_definitions(dns-server PUBLIC "-DLOCAL_BUILD=1")
     message("Local Run!!!")
 endif()
+
 target_compile_definitions(dns-server-resolver PUBLIC "-DRESOLVER=1")
+target_compile_definitions(dns-server-resolver PUBLIC "-DLOCAL_BUILD=1")

@@ -76,6 +76,7 @@ static void dequeue_client_msg_for_resolver(client_msg_t *msg);
 static void dns_process_msg();
 static void dns_process_msg__dns_hdr(dns_hdr_t *hdr);
 static void dns_process_msg__dns_hdr_valid(dns_hdr_t *hdr);
+static void dns_process_msg__dns_hdr_valid_response(dns_hdr_t *hdr);
 static void dns_process_msg__dns_hdr_valid_query(dns_hdr_t *hdr);
 static void dns_process_msg__dns_hdr_valid_query_standard(dns_hdr_t *hdr);
 
@@ -356,7 +357,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
             target_client_data.len,
             client_msg_str(&target_client_data)
         );
-#endif //defined(LOCAL_BUILD)
+#endif
 
         // Append the raw data
         net_serializer_append_raw(&serializer, target_client_data.data, target_client_data.len);
@@ -406,15 +407,17 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
             log_debug(&resolver_logger, "Question(%u): %s", i, dns_question_str(&question));
 
             // serialize the header and question and transfer to the resolver
+            resolver_data.len = 0;
             resolver_data.len = dns_hdr_serialize(&inner_header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len);
             resolver_data.len += dns_question_serialize(&question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len);
 
 #if defined(LOCAL_BUILD)
-            log_debug(&resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}",
-                      resolver_data.len,
-                      ip,
-                      htons(resolver_data.context.addr.sin_port),
-                      client_msg_str(&resolver_data));
+log_debug(&resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}",
+    resolver_data.len,
+    ip,
+    htons(resolver_data.context.addr.sin_port),
+    client_msg_str(&resolver_data)
+);
 #endif
 
             bytes = udp_server_handle_send(&g_server_handle, &resolver_data);
@@ -428,12 +431,13 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 bytes = udp_server_handle_receive(&g_server_handle, &resolver_data);
 
                 // received valid data
-#if defined(LOCAL_BUILD)
-            log_trace(&resolver_logger, "Successfully received %d bytes from the resolver");
-#endif
-
+                
                 if (bytes > 0)
                 {
+                    #if defined(LOCAL_BUILD)
+                    log_trace(&resolver_logger, "Successfully received %d bytes from the resolver");
+                    #endif
+                    
                     g_server_handle.rt_info.read_bytes += bytes;
 
                     bytes = dns_hdr_deserialize(&inner_header, resolver_data.data, resolver_data.len);
@@ -448,6 +452,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                     // Append question and answer to their queues
                     // cir_buffer_write(&questions, (const char *)&question, sizeof(dns_question_t));
                     cir_buffer_write(&answers, (const char *)&answer, sizeof(dns_answer_t));
+
                     success = true;
                 }
                 else if (bytes == 0)
@@ -457,14 +462,17 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                     #endif
 
                     g_server_handle.rt_info.read_timeouts++;
+
                     success = false;
+                    
                     break;
                 }
                 else
                 {
                     #if defined(LOCAL_BUILD)
-                    log_error(&resolver_logger, "Receive to resolver failed with error - '%s'", strerror(errno) );
+                    log_error(&resolver_logger, "Receive from resolver failed with error - '%s'", strerror(errno) );
                     #endif
+
                     g_server_handle.rt_info.invalid_receives++;
                     success = false;
                     break;
@@ -482,6 +490,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                     g_server_handle.rt_info.invalid_transmits++;
                 }
 
+                success = false;
                 break;
             }
         }
@@ -501,17 +510,18 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
             // pass to the transmitter
             memcpy(target_client_data.data, net_serializer_get_buf(&serializer), net_serializer_get_size(&serializer));
             target_client_data.len = net_serializer_get_size(&serializer);
-#if defined(LOCAL_BUILD)
-log_info(&resolver_logger, "Passing resolved data back to client");
-#endif
+
+            #if defined(LOCAL_BUILD)
+            log_info(&resolver_logger, "Passing resolved data back to client");
+            #endif
 
             enqueue_client_msg_for_tx(&target_client_data);
         }
         else
         {
-#if defined(LOCAL_BUILD)
+            #if defined(LOCAL_BUILD)
             log_error(&resolver_logger, "Error processing packet. Dropping...");
-#endif
+            #endif
         }
 
         net_serializer_clear(&serializer);
@@ -521,9 +531,9 @@ log_info(&resolver_logger, "Passing resolved data back to client");
     cir_buffer_deinit( &questions );
     cir_buffer_deinit( &answers );
 
-#if defined(LOCAL_BUILD)
-logger_release_instance(&resolver_logger);
-#endif
+    #if defined(LOCAL_BUILD)
+    logger_release_instance(&resolver_logger);
+    #endif
 }
 
 void dns_server_main(int argc, char *argv[])
@@ -876,6 +886,12 @@ static void dns_process_msg__dns_hdr_valid_query(dns_hdr_t *hdr)
     }
 }
 
+
+static void dns_process_msg__dns_hdr_valid_response(dns_hdr_t *hdr)
+{
+
+}
+
 /// @brief Handle a Standard DNS query
 /// @param hdr
 static void dns_process_msg__dns_hdr_valid_query_standard(dns_hdr_t *hdr)
@@ -1011,9 +1027,13 @@ static void dns_process_msg__dns_hdr_questions(dns_hdr_t *hdr)
         {
             // A compressed question has been returned
             #if defined(LOCAL_BUILD)
-            log_debug(&g_main_thread_logger, "Invalid Header encountered");
+            log_debug(&g_main_thread_logger, "Invalid Header encountered...Returning [Format Error]");
             #endif
             hdr->rcode = DNS_HEADER_RCODE__FORMAT_ERROR;
+            
+            cir_buffer_clear(&g_questions);
+            cir_buffer_clear(&g_answers);
+            
             break;
         }
 
@@ -1148,7 +1168,12 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
         g_hdr.an_count++;
     }
 
-    g_hdr.qr = 1; // mark as response
+#if defined(RESOLVER)
+g_hdr.qr = 0; // mark as response
+#else
+g_hdr.qr = 1; // mark as response
+#endif // RESOLVER
+
 
     // insert the header at the front
     dns_hdr_serialize(&g_hdr, g_dns_section_buffer, DSN_HDR_SIZE);
