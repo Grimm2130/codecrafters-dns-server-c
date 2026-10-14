@@ -69,33 +69,62 @@ static void test_cir_buffer_write(int cnt)
 
 void run_tests_cir_buffer()
 {
+    int cnt;
     test_cir_buffer_create();
     test_cir_buffer_empty(true);
     test_cir_buffer_full(false);
 
-    test_cir_buffer_write(CIR_BUFFER_CAPACITY / 2);
-    test_cir_buffer_empty(false);
-    test_cir_buffer_full(false);
+    // Write Full
+    {
+        cnt = CIR_BUFFER_CAPACITY;
+        test_cir_buffer_write(cnt);
+        test_cir_buffer_empty(false);
+        test_cir_buffer_full(true);
+        
+        printf("Cir Write (%d) size %u, front == %u, rear %u\n", cnt, cbuf.size, cbuf.front, cbuf.rear );
+        assert( cbuf.size == CIR_BUFFER_CAPACITY );
+        assert( cbuf.front == 0 );
+        assert( cbuf.rear == 0 );
+    }
+    
+    // Read all
+    {
+        cnt = CIR_BUFFER_CAPACITY;
+        test_cir_buffer_read(cnt);
+        test_cir_buffer_empty(true);
+        test_cir_buffer_full(false);
+        
+        printf("Cir Write (%d) size %u, front == %u, rear %u\n", cnt, cbuf.size, cbuf.front, cbuf.rear );
+        assert( cbuf.size == 0 );
+        assert( cbuf.front == 0 );
+        assert( cbuf.rear == 0 );
+    }
+    
+    // Write to overflow
+    {  
+        cnt = CIR_BUFFER_CAPACITY + 2;
+        test_cir_buffer_write(cnt);
+        test_cir_buffer_empty(false);
+        test_cir_buffer_full(true);
 
-    test_cir_buffer_write((CIR_BUFFER_CAPACITY / 2) + 1);
-    test_cir_buffer_empty(false);
-    test_cir_buffer_full(true);
+        printf("Cir Write (%d) size %u, front == %u, rear %u\n", cnt, cbuf.size, cbuf.front, cbuf.rear );
+        assert( cbuf.size == CIR_BUFFER_CAPACITY );
+        assert( cbuf.front == 2 );
+        assert( cbuf.rear == 2 );
+    }
 
-    test_cir_buffer_read((CIR_BUFFER_CAPACITY / 2) + 1);
-    test_cir_buffer_empty(false);
-    test_cir_buffer_full(false);
-
-    test_cir_buffer_read(CIR_BUFFER_CAPACITY / 2);
-    test_cir_buffer_empty(true);
-    test_cir_buffer_full(false);
-
-    test_cir_buffer_write(CIR_BUFFER_CAPACITY * 3);
-    test_cir_buffer_empty(false);
-    test_cir_buffer_full(true);
-
-    test_cir_buffer_read(CIR_BUFFER_CAPACITY);
-    test_cir_buffer_empty(true);
-    test_cir_buffer_full(false);
+    // Read all
+    {
+        cnt = CIR_BUFFER_CAPACITY;
+        test_cir_buffer_read(cnt);
+        test_cir_buffer_empty(true);
+        test_cir_buffer_full(false);
+        
+        printf("Cir Write (%d) size %u, front == %u, rear %u\n", cnt, cbuf.size, cbuf.front, cbuf.rear );
+        assert( cbuf.size == 0 );
+        assert( cbuf.front == 2 );
+        assert( cbuf.rear == 2 );
+    }
 
     cir_buffer_deinit(&cbuf);
 }

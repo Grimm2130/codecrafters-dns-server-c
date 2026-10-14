@@ -3,7 +3,6 @@
 
 #ifdef RESOLVER
 #define DNS_PORT 2054U
-// #define DNS_IP   "127.0.0.1"
 #else
 #define DNS_PORT 2053U
 #endif

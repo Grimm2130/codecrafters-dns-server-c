@@ -9,14 +9,16 @@ build:
 clean:
 	rm -rf bin/*
 
-clean-logs:
+clear-logs:
 	rm -rf logs/*
 
 run:
 	bin/dns-server
 
 run-resolver:
-	bin/dns-server --resolver 0.0.0.0:2054
+	bin/dns-server --resolver 127.0.0.1:2054
+
+# 	bin/dns-server --resolver 0.0.0.0:2054
 
 run-as-resolver:
 	bin/dns-server-resolver

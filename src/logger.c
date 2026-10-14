@@ -692,13 +692,14 @@ static void logger_writer_routine( void * arg )
 static void update_timestamp( log_timestamp_t * timestamp )
 {
     struct timespec spec;
+    static const uint64_t s_div = 1000000000;
     clock_gettime( CLOCK_MONOTONIC, &spec );
     
     uint64_t sec = spec.tv_sec;
     uint64_t nsec = spec.tv_nsec;
     
-    timestamp->raw = sec / 1000000000;
-    timestamp->raw += nsec % 1000000000;
+    timestamp->raw = sec / s_div;
+    timestamp->raw += nsec % s_div;
 }
 
 /*====================================================================*/
