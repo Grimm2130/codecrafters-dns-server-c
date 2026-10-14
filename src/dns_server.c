@@ -250,13 +250,14 @@ static void dns_transmitter_routine(void *arg)
         dequeue_client_msg_for_rx(&to_transmit);
         ip_n_to_str(htonl(to_transmit.context.addr.sin_addr.s_addr), ip, 20);
 
-#if defined(LOCAL_BUILD)
+        #if defined(LOCAL_BUILD)
         log_debug(&transmitter_logger, ">>> Transmitting [%d] bytes to %s:%u {%s}",
-                  to_transmit.len,
-                  ip,
-                  htons(to_transmit.context.addr.sin_port),
-                  client_msg_str(&to_transmit));
-#endif //   defined(LOCAL_BUILD)
+            to_transmit.len,
+            ip,
+            htons(to_transmit.context.addr.sin_port),
+            client_msg_str(&to_transmit)
+        );
+        #endif //   defined(LOCAL_BUILD)
 
         bytes = udp_server_handle_send(srv_hndl, &to_transmit);
 
@@ -348,16 +349,20 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
     {
         // reset the serializer offset
         serializer_off = 0;
+        
+        // reset the temp-buffers
+        cir_buffer_clear( &questions );
+        cir_buffer_clear( &answers );
 
         // Check the queue for new data requested to be resolved
         dequeue_client_msg_for_resolver(&target_client_data);
 
-#if defined(LOCAL_BUILD)
+        #if defined(LOCAL_BUILD)
         log_debug(&resolver_logger, "Dequeued [%d] bytes {%s}",
             target_client_data.len,
             client_msg_str(&target_client_data)
         );
-#endif
+        #endif
 
         // Append the raw data
         net_serializer_append_raw(&serializer, target_client_data.data, target_client_data.len);
@@ -381,7 +386,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
         inner_header.qd_count = 1;
 
         // For each question request and answer
-        for (uint8_t i = 0; header.qd_count; i++)
+        for (uint8_t i = 0; i < header.qd_count; i++)
         {
             success = false;
             uint16_t pointer = 0;
@@ -392,15 +397,16 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 net_serializer_get_size(&serializer) - DSN_HDR_SIZE,
                 &pointer
             );
+            
 
 
             // Handle compressed query
             if (pointer)
             {
                 // TODO: Do more work to resolve
-#if defined(LOCAL_BUILD)
+                #if defined(LOCAL_BUILD)
                 log_fatal(&resolver_logger, "Compressed Querry encountered!!");
-#endif
+                #endif
                 exit(-1);
             }
 
@@ -411,14 +417,14 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
             resolver_data.len = dns_hdr_serialize(&inner_header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len);
             resolver_data.len += dns_question_serialize(&question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len);
 
-#if defined(LOCAL_BUILD)
-log_debug(&resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}",
-    resolver_data.len,
-    ip,
-    htons(resolver_data.context.addr.sin_port),
-    client_msg_str(&resolver_data)
-);
-#endif
+            #if defined(LOCAL_BUILD)
+            log_debug(&resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}",
+                resolver_data.len,
+                ip,
+                htons(resolver_data.context.addr.sin_port),
+                client_msg_str(&resolver_data)
+            );
+            #endif
 
             bytes = udp_server_handle_send(&g_server_handle, &resolver_data);
 
@@ -512,7 +518,10 @@ log_debug(&resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}",
             target_client_data.len = net_serializer_get_size(&serializer);
 
             #if defined(LOCAL_BUILD)
-            log_info(&resolver_logger, "Passing resolved data back to client");
+            log_info(&resolver_logger, "Passing resolved data back to client {%u : %s}",
+                target_client_data.len,
+                client_msg_str(&target_client_data)
+            );
             #endif
 
             enqueue_client_msg_for_tx(&target_client_data);
@@ -850,6 +859,10 @@ static void dns_process_msg__dns_hdr_valid(dns_hdr_t *hdr)
     break;
 
     case DNS_HEADER_TYPE__RESPONSE:
+    {
+        // handle a response type
+    }   
+    break;
     default:
     {
         #if defined(LOCAL_BUILD)
@@ -1131,7 +1144,7 @@ static void dns_process_msg__answer_host_addr_internet(dns_answer_t *answer, con
 
 static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
 {
-    uint32_t bytes = DSN_HDR_SIZE; // offset for header
+    uint32_t bytes = 0; // offset for header
     dns_question_t question;
     dns_answer_t answer;
 
@@ -1139,50 +1152,49 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size)
     log_debug(&g_main_thread_logger, "Serializing Response...");
     #endif
 
-    memset(g_dns_section_buffer, 0, DNS_SECTION_BUFFER_SIZE);
-
-    g_hdr.qd_count = 0;
-
-    // serialize the questions
-    while (cir_buffer_is_empty(&g_questions) == false)
+    if( g_hdr.rcode == DNS_HEADER_RCODE__NO_ERROR )
     {
-        assert(cir_buffer_read(&g_questions, (char *)&question, sizeof(dns_question_t)) == sizeof(dns_question_t));
-        bytes += dns_question_serialize(&question, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes);
-        #if defined(LOCAL_BUILD)
-        log_debug(&g_main_thread_logger, "[Response] Question %s", dns_question_str(&question));
-        #endif
-        g_hdr.qd_count++;
-    }
+        bytes = DSN_HDR_SIZE;
 
-    g_hdr.an_count = 0;
-    // Serialize the answers
-    while (cir_buffer_is_empty(&g_answers) == false)
-    {
-        assert(cir_buffer_read(&g_answers, (char *)&answer, sizeof(dns_answer_t)) == sizeof(dns_answer_t));
-        bytes += dns_answer_serialize(&answer, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes);
+        memset(g_dns_section_buffer, 0, DNS_SECTION_BUFFER_SIZE);
+    
+        g_hdr.qr = 1; // mark as response
+        g_hdr.qd_count = g_questions.size;
+        g_hdr.an_count = g_answers.size;
         
+        dns_hdr_serialize(&g_hdr, g_dns_section_buffer, DSN_HDR_SIZE);
+    
+        // serialize the questions
+        while (cir_buffer_is_empty(&g_questions) == false)
+        {
+            assert(cir_buffer_read(&g_questions, (char *)&question, sizeof(dns_question_t)) == sizeof(dns_question_t));
+            bytes += dns_question_serialize(&question, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes);
+            
+            #if defined(LOCAL_BUILD)
+            log_debug(&g_main_thread_logger, "[Response] Question %s", dns_question_str(&question));
+            #endif
+        }
+    
+        g_hdr.an_count = 0;
+        // Serialize the answers
+        while (cir_buffer_is_empty(&g_answers) == false)
+        {
+            assert(cir_buffer_read(&g_answers, (char *)&answer, sizeof(dns_answer_t)) == sizeof(dns_answer_t));
+            bytes += dns_answer_serialize(&answer, g_dns_section_buffer + bytes, DNS_SECTION_BUFFER_SIZE - bytes);
+            
+            #if defined(LOCAL_BUILD)
+            log_debug(&g_main_thread_logger, "[Response] Answer %s", dns_answer_str(&answer));
+            #endif
+        }
+
+        // insert the header at the front
+    
         #if defined(LOCAL_BUILD)
-        log_debug(&g_main_thread_logger, "[Response] Answer %s", dns_answer_str(&answer));
+        log_debug(&g_main_thread_logger, "[Response] Header %s", dns_hdr_str(&g_hdr));
         #endif
-        
-        g_hdr.an_count++;
+    
+        memcpy(rply_buf, g_dns_section_buffer, bytes);
     }
-
-#if defined(RESOLVER)
-g_hdr.qr = 0; // mark as response
-#else
-g_hdr.qr = 1; // mark as response
-#endif // RESOLVER
-
-
-    // insert the header at the front
-    dns_hdr_serialize(&g_hdr, g_dns_section_buffer, DSN_HDR_SIZE);
-
-    #if defined(LOCAL_BUILD)
-    log_debug(&g_main_thread_logger, "[Response] Header %s", dns_hdr_str(&g_hdr));
-    #endif
-
-    memcpy(rply_buf, g_dns_section_buffer, bytes);
 
     return bytes;
 }

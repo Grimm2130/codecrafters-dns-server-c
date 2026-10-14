@@ -280,80 +280,83 @@ uint32_t dns_question_deserialize(dns_question_t *query, const char *in_buf, con
 
     offset = 0;
 
-    // reset the question
-    dns_question_init(query);
-
-    // instantiate the serializer
-    net_serializer_init(&serializer);
-
-    // Copy the buffer contents into the serializer
-    net_serializer_append_raw(&serializer, in_buf, size);
-
-    do
+    if( in_buf )
     {
-        curr_label = &(query->qname[query->label_cnt]);
-
-        // read in the first byte
-        if (net_serializer_copy_u8(&serializer, 0, &len, 1) == 0)
+        // reset the question
+        dns_question_init(query);
+    
+        // instantiate the serializer
+        net_serializer_init(&serializer);
+    
+        // Copy the buffer contents into the serializer
+        net_serializer_append_raw(&serializer, in_buf, size);
+    
+        do
         {
-            // Non-null label
-            if (len)
+            curr_label = &(query->qname[query->label_cnt]);
+    
+            // read in the first byte
+            if (net_serializer_copy_u8(&serializer, 0, &len, 1) == 0)
             {
-                // handle a compressed label
-                if (DNS_LABEL_IS_COMPRESSED(len))
+                // Non-null label
+                if (len)
                 {
-                    // read in the offset
-                    net_serializer_remove_u16(&serializer, 0, c_pointer, 1);
-                    *c_pointer &= DNS_QUESTION_COMPRESSED_POINTER_MASK;
-                    offset += sizeof(uint16_t);
-                    break;
+                    // handle a compressed label
+                    if (DNS_LABEL_IS_COMPRESSED(len))
+                    {
+                        // read in the offset
+                        net_serializer_remove_u16(&serializer, 0, c_pointer, 1);
+                        *c_pointer &= DNS_QUESTION_COMPRESSED_POINTER_MASK;
+                        offset += sizeof(uint16_t);
+                        break;
+                    }
+                    else
+                    {
+                        // printf("Copying len : %u\n", len );
+    
+                        label_len = dns_label_deserialize(
+                            curr_label,
+                            net_serializer_get_buf(&serializer),
+                            net_serializer_get_size(&serializer));
+    
+                        // printf("\tLabel: %s\n", dns_label_str(curr_label));
+    
+                        // remove the label entry
+                        net_serializer_remove_raw(&serializer, 0, NULL, label_len);
+    
+                        query->label_cnt++;
+                        offset += label_len;
+                    }
                 }
                 else
                 {
-                    // printf("Copying len : %u\n", len );
-
-                    label_len = dns_label_deserialize(
-                        curr_label,
-                        net_serializer_get_buf(&serializer),
-                        net_serializer_get_size(&serializer));
-
-                    // printf("\tLabel: %s\n", dns_label_str(curr_label));
-
-                    // remove the label entry
-                    net_serializer_remove_raw(&serializer, 0, NULL, label_len);
-
-                    query->label_cnt++;
-                    offset += label_len;
+                    // Null label
+                    net_serializer_remove_u8(&serializer, 0, NULL, 1);
+                    offset += sizeof(uint8_t);
                 }
             }
             else
             {
-                // Null label
-                net_serializer_remove_u8(&serializer, 0, NULL, 1);
-                offset += sizeof(uint8_t);
+                // ! ERROR
             }
+    
+        } while (len);
+    
+        // printf("Done\n");
+    
+        if (net_serializer_remove_u16(&serializer, 0, &query->qtype, 1) == 0 )
+        {
+            offset += sizeof(uint16_t);
         }
-        else
+        
+        if (net_serializer_remove_u16(&serializer, 0, &query->qclass, 1) == 0)
         {
             // ! ERROR
+            offset += sizeof(uint16_t);
         }
-
-    } while (len);
-
-    // printf("Done\n");
-
-    if (net_serializer_remove_u16(&serializer, 0, &query->qtype, 1) == 0 )
-    {
-        offset += sizeof(uint16_t);
-    }
     
-    if (net_serializer_remove_u16(&serializer, 0, &query->qclass, 1) == 0)
-    {
-        // ! ERROR
-        offset += sizeof(uint16_t);
+        net_serializer_deinit(&serializer);
     }
-
-    net_serializer_deinit(&serializer);
 
     
 
