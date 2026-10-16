@@ -27,7 +27,6 @@ task_t g_transmitter;
 task_t g_resolver;
 udp_server_handle_t g_server_handle;
 udp_server_handle_t g_remote_resolver_handle;
-network_context_t g_resolver_network_context;
 sync_cir_buffer_t g_transmit_buffer;
 sync_cir_buffer_t g_resolver_transmit_buffer;
 net_serializer_t g_rxSerializer;
@@ -70,7 +69,7 @@ static void print_msg(const uint8_t *data, const int len);
 static void dns_handle_new_client_data(client_msg_t *msg);
 static void enqueue_client_msg_for_tx(const client_msg_t *msg);
 static void enqueue_client_msg_for_resolver(const client_msg_t *msg);
-static void dequeue_client_msg_for_rx(client_msg_t *msg);
+static void dequeue_client_msg_for_tx(client_msg_t *msg);
 static void dequeue_client_msg_for_resolver(client_msg_t *msg);
 
 static void dns_process_msg();
@@ -123,18 +122,22 @@ static void init_remote_resolver_handle(const char *resolver_addr)
                 g_remote_resolver_avail = true;
 
                 udp_server_handle_params_t resolver_udp_handle_params =
-                    {
-                        .client_allow_mask = -1,
-                        .port = port,
-                        .rcv_to = 1e6,
-                        .ip = ip};
+                {
+                    .client_allow_mask = -1,
+                    .port = port,
+                    .rcv_to = 1e6,
+                    .ip = ip
+                };
                 #if defined(LOCAL_BUILD)
                 log_debug(&g_main_thread_logger, "Remote DNS Resolver @<%s>:<%u>", ip, port);
                 #endif  // LOCAL_BUILD
-
+                
                 // initialize the IP address
-                // udp_server_handle_init( &g_remote_resolver_handle, &resolver_udp_handle_params );
-                network_context_init(&g_resolver_network_context, ip, port);
+                udp_server_handle_init( &g_remote_resolver_handle, &resolver_udp_handle_params );
+                
+                #if defined(LOCAL_BUILD)
+                log_debug(&g_main_thread_logger, "Remote DNS Resolver Handle Sock (%d) @<%s>:<%u>", g_remote_resolver_handle.context->sock, ip, port);
+                #endif  // LOCAL_BUILD
             }
         }
     }
@@ -247,7 +250,7 @@ static void dns_transmitter_routine(void *arg)
 
     while (g_runFlag)
     {
-        dequeue_client_msg_for_rx(&to_transmit);
+        dequeue_client_msg_for_tx(&to_transmit);
         ip_n_to_str(htonl(to_transmit.context.addr.sin_addr.s_addr), ip, 20);
 
         #if defined(LOCAL_BUILD)
@@ -288,30 +291,32 @@ static void dns_resolver_routine(void *arg)
 {
     bool success;
     int bytes;
+
+    uint16_t pointer;
     uint32_t serializer_off;
-
-    char * data;
-    uint32_t data_size;
-
+    
     char ip[20];
-    char answer_buf[255];
-
-    dns_hdr_t header;
+    
+    #define TEMP_BUFF_SIZE 255U
+    char answer_buf[TEMP_BUFF_SIZE];
+    char handle_info[TEMP_BUFF_SIZE];
+    
+    dns_hdr_t header, inner_header;
     dns_question_t question;
     dns_answer_t answer;
-
+    
     client_msg_t resolver_data;      // stores resolver info
     client_msg_t target_client_data; // stores client info
-
+    
     net_serializer_t serializer;
-
+    
     cir_buffer_t questions;
     cir_buffer_t answers;
-
+    
     logger_t resolver_logger;
-
+    
     // udp_server_handle_t *resolver_handle = (udp_server_handle_t *)arg;
-    network_context_t *resolver_context = (network_context_t *)arg;
+    udp_server_handle_t *resolver_handle = (udp_server_handle_t *)arg;
 
     logger_params_t resolver_logger_params =
         {
@@ -337,9 +342,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
     cir_buffer_init(&answers, false);
 
     // Set the network info for the resolver
-    memcpy(&resolver_data.context, resolver_context, sizeof(network_context_t));
+    memcpy(&resolver_data.context, resolver_handle->context, sizeof(network_context_t));
 
-    printf("Here\n");
     fflush(stdout);
 
     // Get the IP of the resolver
@@ -347,193 +351,204 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
 
     while (g_runFlag)
     {
-        // reset the serializer offset
-        serializer_off = 0;
+        udp_server_handle_get_info( resolver_handle, handle_info, TEMP_BUFF_SIZE );
+        
+        #if defined(LOCAL_BUILD)
+        log_trace( &resolver_logger, "Resolver Handle: %s", handle_info );
+        #endif // LOCAL_USER
         
         // reset the temp-buffers
         cir_buffer_clear( &questions );
         cir_buffer_clear( &answers );
 
-        // Check the queue for new data requested to be resolved
-        dequeue_client_msg_for_resolver(&target_client_data);
+        dequeue_client_msg_for_resolver( &target_client_data );
 
         #if defined(LOCAL_BUILD)
-        log_debug(&resolver_logger, "Dequeued [%d] bytes {%s}",
+        log_trace( &resolver_logger, "Dequeued client data for transfer to remote resolver - {%u : %s}",
             target_client_data.len,
             client_msg_str(&target_client_data)
         );
-        #endif
-
-        // Append the raw data
-        net_serializer_append_raw(&serializer, target_client_data.data, target_client_data.len);
-
-        // Extract the header from the message
-        bytes = dns_hdr_deserialize(
-            &header,
-            net_serializer_get_buf_from_offset(&serializer, 0),
-            net_serializer_get_size(&serializer)
-        );
-
-        assert(bytes == DSN_HDR_SIZE);
-
-#if defined(LOCAL_BUILD)
-        log_debug(&resolver_logger, "Header: %s", dns_hdr_str(&header));
-#endif
-
-        // Update the inner header that only carries enough info for one question
-        dns_hdr_t inner_header;
-        memcpy(&inner_header, &header, DSN_HDR_SIZE);
-        inner_header.qd_count = 1;
-
-        // For each question request and answer
-        for (uint8_t i = 0; i < header.qd_count; i++)
+        #endif // LOCAL_USER
+        
+        // Copy into the serializer
+        if( net_serializer_append_raw( &serializer, target_client_data.data, target_client_data.len ) == 0 )
         {
-            success = false;
-            uint16_t pointer = 0;
+            // extract header from client
+            bytes = dns_hdr_deserialize( &header, net_serializer_get_buf(&serializer), net_serializer_get_size(&serializer));
 
-            // extract the question
-            bytes = dns_question_deserialize(&question, 
-                net_serializer_get_buf_from_offset(&serializer, DSN_HDR_SIZE),
-                net_serializer_get_size(&serializer) - DSN_HDR_SIZE,
-                &pointer
-            );
-            
-
-
-            // Handle compressed query
-            if (pointer)
+            if( bytes == DSN_HDR_SIZE )
             {
-                // TODO: Do more work to resolve
                 #if defined(LOCAL_BUILD)
-                log_fatal(&resolver_logger, "Compressed Querry encountered!!");
-                #endif
-                exit(-1);
-            }
+                log_debug( &resolver_logger, "[Resolver Request] Header: {%s}", dns_hdr_str( &header ) );
+                #endif // LOCAL_USER
 
-            log_debug(&resolver_logger, "Question(%u): %s", i, dns_question_str(&question));
+                // Copy the inner header to be used for intermediate transactions
+                memcpy( &inner_header, &header, DSN_HDR_SIZE );
+                inner_header.qd_count = 1;
 
-            // serialize the header and question and transfer to the resolver
-            resolver_data.len = 0;
-            resolver_data.len = dns_hdr_serialize(&inner_header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len);
-            resolver_data.len += dns_question_serialize(&question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len);
-
-            #if defined(LOCAL_BUILD)
-            log_debug(&resolver_logger, "[Resolver] Transmitting [%d] bytes to %s:%u {%s}",
-                resolver_data.len,
-                ip,
-                htons(resolver_data.context.addr.sin_port),
-                client_msg_str(&resolver_data)
-            );
-            #endif
-
-            bytes = udp_server_handle_send(&g_server_handle, &resolver_data);
-
-            // Successful transmit
-            if (bytes > 0)
-            {
-                g_server_handle.rt_info.written_bytes++;
-
-                // receive data back from the resolver
-                bytes = udp_server_handle_receive(&g_server_handle, &resolver_data);
-
-                // received valid data
-                
-                if (bytes > 0)
+                // remove the header from the serializer
+                if( net_serializer_remove_raw( &serializer, 0, NULL, bytes ) )
                 {
                     #if defined(LOCAL_BUILD)
-                    log_trace(&resolver_logger, "Successfully received %d bytes from the resolver");
-                    #endif
-                    
-                    g_server_handle.rt_info.read_bytes += bytes;
-
-                    bytes = dns_hdr_deserialize(&inner_header, resolver_data.data, resolver_data.len);
-                    assert(bytes == DSN_HDR_SIZE);
+                    log_fatal( &resolver_logger, "Serializer fault");
+                    #endif // LOCAL_USER
+                    perror( "Resolver Serializer remove" );
+                    sleep(2);
+                    exit(1);
+                }
+                
+                // Process each question
+                for( uint8_t q_idx = 0; q_idx < header.qd_count; q_idx++ )
+                {
+                    // reset the pointer index
+                    pointer = 0;
 
                     // extract the question
-                    bytes += dns_question_deserialize(&question, resolver_data.data + bytes, resolver_data.len - bytes, &pointer);
+                    bytes = dns_question_deserialize(
+                        &question,
+                        net_serializer_get_buf(&serializer),
+                        net_serializer_get_size(&serializer),
+                        &pointer
+                    );
 
-                    // extract the answer
-                    bytes += dns_answer_deserialize(&answer, resolver_data.data + bytes, resolver_data.len - bytes);
+                    if( bytes )
+                    {
+                        // Check if a compressed query was sent
+                        if( pointer )
+                        {
+                            perror("Compressed query!\n");
+                            exit(2);
+                        }
 
-                    // Append question and answer to their queues
-                    // cir_buffer_write(&questions, (const char *)&question, sizeof(dns_question_t));
-                    cir_buffer_write(&answers, (const char *)&answer, sizeof(dns_answer_t));
+                        // remove the question from the serializer
+                        if( net_serializer_remove_raw( &serializer, 0, NULL, bytes ) )
+                        {
+                            #if defined(LOCAL_BUILD)
+                            log_fatal( &resolver_logger, "Serializer fault");
+                            #endif // LOCAL_USER
 
-                    success = true;
+                            exit(3);
+                        }
+
+                        #if defined(LOCAL_BUILD)
+                        log_debug( &resolver_logger, "[Resolver Request] Question: {%s}", dns_question_str( &question ) );
+                        #endif // LOCAL_USER
+
+                        // Copy the header and question into the transmission buffer
+                        resolver_data.len = 0;
+                        bytes = dns_hdr_serialize( &header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
+                        bytes += dns_question_serialize( &question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
+
+                        #if defined(LOCAL_BUILD)
+                        log_trace( &resolver_logger, "Transmitting data: {%s}", client_msg_str(&resolver_data) );
+                        #endif // LOCAL_USER
+                            
+                        if( bytes == udp_server_handle_send( resolver_handle, &resolver_data ) )
+                        {
+                            bytes = udp_server_handle_receive( resolver_handle, &resolver_data );
+
+                            if( bytes > 0 )
+                            {
+                                net_serializer_t inner_serializer;
+                                
+                                resolver_handle->rt_info.read_bytes += bytes;
+                                
+                                net_serializer_init( &inner_serializer );
+
+                                #if defined(LOCAL_BUILD)
+                                log_trace( &resolver_logger, "Receiver data: {%s}", client_msg_str(&resolver_data) );
+                                #endif // LOCAL_USER
+                                
+                                net_serializer_append_raw( &inner_serializer, resolver_data.data, resolver_data.len );
+                                
+                                // extract the header
+                                pointer = 0;
+                                
+                                assert(dns_hdr_deserialize(&inner_header, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer) ));
+                                assert(dns_question_deserialize(&question, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer), &pointer ));
+                                assert(dns_answer_deserialize(&answer, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer)));
+                            
+                                #if defined(LOCAL_BUILD)
+                                log_debug( &resolver_logger, "[Resolver Response] Header: {%s}", dns_hdr_str( &header ) );
+                                log_debug( &resolver_logger, "[Resolver Response] Question: {%s}", dns_question_str( &question ) );
+                                log_debug( &resolver_logger, "[Resolver Response] Answer: {%s}", dns_answer_str( &answer ) );
+                                #endif // LOCAL_USER
+
+                                cir_buffer_write(&questions, (const char*)&question, sizeof(dns_question_t) );
+                                cir_buffer_write(&answers, (const char*)&answer, sizeof(dns_question_t) );
+
+                                net_serializer_deinit( &inner_serializer );
+                            }
+                            else if( bytes == 0 )
+                            {
+                                resolver_handle->rt_info.read_timeouts++;
+                            }
+                            else
+                            {
+                                resolver_handle->rt_info.invalid_receives++;
+                            }
+                        }
+                        else
+                        {
+                            #if defined(LOCAL_BUILD)
+                            log_fatal( &resolver_logger, "Transmission Fault %s", strerror(errno) );
+                            #endif // LOCAL_USER
+                            
+                            g_server_handle.rt_info.invalid_transmits++;
+                        }
+                    }
                 }
-                else if (bytes == 0)
+
+                net_serializer_clear(&serializer);
+
+
+                // Serialize head
+                bytes = dns_hdr_serialize( &header, answer_buf, TEMP_BUFF_SIZE );
+                net_serializer_append_raw( &serializer, answer_buf, bytes );
+
+                // deserialize questions
+                while( cir_buffer_read(&questions, (char*)&question, sizeof(dns_question_t)) )
                 {
-                    #if defined(LOCAL_BUILD)
-                    log_error(&resolver_logger, "Receive to resolver timed out");
-                    #endif
-
-                    g_server_handle.rt_info.read_timeouts++;
-
-                    success = false;
-                    
-                    break;
+                    bytes = dns_question_serialize( &question, answer_buf, TEMP_BUFF_SIZE );
+                    net_serializer_append_raw( &serializer, answer_buf, bytes );
                 }
-                else
+                
+                // deserialize answers
+                while( cir_buffer_read(&answers, (char*)&answer, sizeof(dns_answer_t)) )
                 {
-                    #if defined(LOCAL_BUILD)
-                    log_error(&resolver_logger, "Receive from resolver failed with error - '%s'", strerror(errno) );
-                    #endif
-
-                    g_server_handle.rt_info.invalid_receives++;
-                    success = false;
-                    break;
+                    bytes = dns_answer_serialize( &answer, answer_buf, TEMP_BUFF_SIZE );
+                    net_serializer_append_raw( &serializer, answer_buf, bytes );
                 }
             }
-            // invalid transmits
             else
             {
                 #if defined(LOCAL_BUILD)
-                log_error(&resolver_logger, "Transmit to resolver failed with error code - '%s'", strerror(errno));
-                #endif
-
-                if (bytes < 0)
-                {
-                    g_server_handle.rt_info.invalid_transmits++;
-                }
-
-                success = false;
-                break;
+                log_error( &resolver_logger, "DNS header deserialization size error. Actual %u, Expected %u",
+                    bytes,
+                    DSN_HDR_SIZE
+                );
+                #endif // LOCAL_USER
             }
-        }
-
-        if (success)
-        {
-            while (cir_buffer_is_empty(&answers) == false)
-            {
-                // remove from queue
-                cir_buffer_read(&answers, (char *)&answer, sizeof(dns_answer_t));
-
-                // Serialize answer and append to buffer
-                bytes = dns_answer_serialize(&answer, answer_buf, 255);
-                net_serializer_append_raw(&serializer, answer_buf, bytes);
-            }
-
-            // pass to the transmitter
-            memcpy(target_client_data.data, net_serializer_get_buf(&serializer), net_serializer_get_size(&serializer));
-            target_client_data.len = net_serializer_get_size(&serializer);
-
-            #if defined(LOCAL_BUILD)
-            log_info(&resolver_logger, "Passing resolved data back to client {%u : %s}",
-                target_client_data.len,
-                client_msg_str(&target_client_data)
-            );
-            #endif
-
-            enqueue_client_msg_for_tx(&target_client_data);
         }
         else
         {
             #if defined(LOCAL_BUILD)
-            log_error(&resolver_logger, "Error processing packet. Dropping...");
-            #endif
+            log_fatal( &resolver_logger, "Serializer Append fault - %s", strerror(errno) );
+            #endif // LOCAL_USER
         }
-
-        net_serializer_clear(&serializer);
+        
+        memcpy(target_client_data.data, net_serializer_get_buf(&serializer), net_serializer_get_size(&serializer));
+        target_client_data.len = net_serializer_get_size(&serializer);
+        
+        #if defined(LOCAL_BUILD)
+        log_trace( &resolver_logger, "Enqueueing client data post response from remote resolver - {%u : %s}",
+            target_client_data.len,
+            client_msg_str(&target_client_data)
+        );
+        #endif // LOCAL_USER
+                
+        enqueue_client_msg_for_tx( &target_client_data );
+        net_serializer_clear( &serializer );
     }
 
     net_serializer_deinit( &serializer );
@@ -637,7 +652,7 @@ void dns_service_start(const char *forwarding_addr)
         .can_join = true,
         .prio = 10,
         .stack_size = 1e6,
-        .arg = (void *)(&g_resolver_network_context),
+        .arg = (void *)(&g_remote_resolver_handle),
         .fn = dns_resolver_routine};
 
     // initialize serve_handle params
@@ -648,6 +663,10 @@ void dns_service_start(const char *forwarding_addr)
         .ip = DNS_IP};
 
     udp_server_handle_init(&g_server_handle, &udp_server_handle_param);
+
+    #if defined(LOCAL_BUILD)
+    log_debug(&g_main_thread_logger, "Server Handle Sock (%d) @<%s>:<%u>", g_server_handle.context->sock, DNS_IP, DNS_PORT );
+    #endif
 
     // initialize rx & tx tasks
     task_init(&g_receiver, &receiver_task_param);
@@ -684,11 +703,15 @@ void dns_service_stop()
 {
     g_runFlag = false;
 
+    udp_server_handle_deinit(&g_remote_resolver_handle);
     udp_server_handle_deinit(&g_server_handle);
 }
 
 static void dns_handle_new_client_data(client_msg_t *msg)
 {
+    #if defined(LOCAL_BUILD)
+    log_trace(&g_main_thread_logger, "New packet received!");
+    #endif
 
     if (g_remote_resolver_avail)
     {
@@ -762,7 +785,7 @@ static void enqueue_client_msg_for_resolver(const client_msg_t *msg)
     sync_cir_buffer_write(&g_resolver_transmit_buffer, (const char *)msg, CLIENT_MSG_SIZE, false);
 }
 
-static void dequeue_client_msg_for_rx(client_msg_t *msg)
+static void dequeue_client_msg_for_tx(client_msg_t *msg)
 {
     sync_cir_buffer_read(&g_transmit_buffer, (char *)msg, CLIENT_MSG_SIZE, false);
 }
@@ -1009,6 +1032,7 @@ static void dns_process_msg__dns_hdr_questions(dns_hdr_t *hdr)
                 if (done == false)
                 {
                     // ! ERROR
+                    perror("error!!");
                     exit(-1);
                 }
 

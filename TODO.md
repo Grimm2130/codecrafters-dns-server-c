@@ -9,7 +9,8 @@
 - [x] Test Serializer
 - [x] Review Bit operation relevant to implementations
 - [x] Test NetSerializer
-- [ ] Implement File Logger
+- [x] Implement File Logger
+- [ ] Cleanup failure on transmission
 - [ ] Update implementation for network context
   - [ ] Allow Specification for UDP network context
   - [ ] Allow Specification for TCP network context

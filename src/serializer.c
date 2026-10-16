@@ -63,6 +63,9 @@ int serializer_remove(serializer_t *srz, const uint32_t start_idx, char *data, i
     const int end_idx = (start_idx + len);
     const int last_len = srz->size - end_idx;
 
+    // printf("Start %u - End %u - Size %u\n", start_idx, end_idx, srz->size );
+    // fflush(stdout);
+
     if (srz->size >= end_idx)
     {
         ret = 0;

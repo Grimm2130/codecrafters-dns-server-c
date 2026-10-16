@@ -146,6 +146,7 @@ void dns_label_init(dns_label_t *label, const char *content, const uint8_t len)
     }
     else
     {
+        perror("Label init error");
         exit(-1);
     }
 }
