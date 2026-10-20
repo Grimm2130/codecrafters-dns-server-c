@@ -500,6 +500,10 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                                 log_debug( &resolver_logger, "[Resolver Response] Header: {%s}", dns_hdr_str( &inner_header ) );
                                 log_debug( &resolver_logger, "[Resolver Response] Question: {%s}", dns_question_str( &question ) );
                                 log_debug( &resolver_logger, "[Resolver Response] Answer: {%s}", dns_answer_str( &answer ) );
+                                #else
+                                printf("[Resolver Response] Header: {%s}", dns_hdr_str( &inner_header ) );
+                                printf("[Resolver Response] Question: {%s}", dns_question_str( &question ) );
+                                printf("[Resolver Response] Answer: {%s}", dns_answer_str( &answer ) );
                                 #endif // LOCAL_USER
 
                                 cir_buffer_write(&questions, (const char*)&question, sizeof(dns_question_t) );
@@ -543,9 +547,9 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 header.an_count = answers.size;
                 
                 #if defined(LOCAL_BUILD)
-                log_debug( &resolver_logger, "[Remote Resolver] Header : %s", dns_hdr_str(&header));
+                log_debug( &resolver_logger, "[Resolver Response] Header : %s", dns_hdr_str(&header));
                 #else
-                printf("[Remote Resolver] Header : %s", dns_hdr_str(&header));
+                printf("[Resolver Response] Header : %s", dns_hdr_str(&header));
                 #endif // LOCAL_USER
 
                 bytes = dns_hdr_serialize( &header, answer_buf, TEMP_BUFF_SIZE );
@@ -562,9 +566,9 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                     cir_buffer_read(&questions, (char*)&question, sizeof(dns_question_t));
                     
                     #if defined(LOCAL_BUILD)
-                    log_debug( &resolver_logger, "[Remote Resolver] Question [%u] : %s", questions.front, dns_question_str(&question));
+                    log_debug( &resolver_logger, "[Resolver Response] Question [%u] : %s", questions.front, dns_question_str(&question));
                     #else
-                    printf("[Remote Resolver] Question [%u] : %s", questions.front, dns_question_str(&question));
+                    printf("[Resolver Response] Question [%u] : %s", questions.front, dns_question_str(&question));
                     #endif
                     
                     bytes = dns_question_serialize( &question, answer_buf, TEMP_BUFF_SIZE );
@@ -580,9 +584,9 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 {
                     
                     #if defined(LOCAL_BUILD)
-                    log_debug( &resolver_logger, "[Remote Resolver] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
+                    log_debug( &resolver_logger, "[Resolver Response] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
                     #else
-                    printf("[Remote Resolver] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
+                    printf("[Resolver Response] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
                     #endif
 
                     cir_buffer_read(&answers, (char*)&answer, sizeof(dns_answer_t));
