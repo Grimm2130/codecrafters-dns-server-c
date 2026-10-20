@@ -526,6 +526,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 
                 net_serializer_clear(&serializer);
                 
+                printf("Remote response:\n");
+
                 // Serialize head
                 #if defined(LOCAL_BUILD)
                 log_debug( &resolver_logger, "Serializing response to client....Header");
@@ -534,6 +536,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 // Set header as response
                 header.qr = 1;
 
+                printf("[Remote Resolver] Header : %s", dns_hdr_str(&header));
+
                 bytes = dns_hdr_serialize( &header, answer_buf, TEMP_BUFF_SIZE );
                 net_serializer_append_raw( &serializer, answer_buf, bytes );
                 
@@ -541,9 +545,12 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 #if defined(LOCAL_BUILD)
                 log_debug( &resolver_logger, "Serializing response to client....Questions");
                 #endif // LOCAL_USER
+
+
                 while( cir_buffer_is_empty(&questions) == false )
                 {
                     cir_buffer_read(&questions, (char*)&question, sizeof(dns_question_t));
+                    printf("[Remote Resolver] Question [%u] : %s", questions.front, dns_question_str(&question));
                     bytes = dns_question_serialize( &question, answer_buf, TEMP_BUFF_SIZE );
                     net_serializer_append_raw( &serializer, answer_buf, bytes );
                 }
@@ -552,8 +559,10 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 #if defined(LOCAL_BUILD)
                 log_debug( &resolver_logger, "Serializing response to client....Anwers");
                 #endif // LOCAL_USER
+                
                 while( cir_buffer_is_empty(&answers) == false )
                 {
+                    printf("[Remote Resolver] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
                     cir_buffer_read(&answers, (char*)&answer, sizeof(dns_answer_t));
                     bytes = dns_answer_serialize( &answer, answer_buf, TEMP_BUFF_SIZE );
                     net_serializer_append_raw( &serializer, answer_buf, bytes );
