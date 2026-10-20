@@ -410,7 +410,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 // Process each question
                 for( uint8_t q_idx = 0; q_idx < header.qd_count; q_idx++ )
                 {
-
+                    inner_header.qr = 0;
                     #if defined(LOCAL_BUILD)
                     log_trace( &resolver_logger, "Processing Question (%u)", q_idx );
                     #endif // LOCAL_USER
@@ -470,7 +470,6 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         
                         if( bytes == udp_server_handle_send( &resolver_handle, &resolver_data ) )
                         {
-RETRY:
                             bytes = udp_server_handle_receive( &resolver_handle, &resolver_data );
                             if( bytes > 0 )
                             {
@@ -522,13 +521,11 @@ RETRY:
                             {
                                 resolver_handle.rt_info.read_timeouts++;
                                 printf( "Reception Fault %s\n", strerror(errno) );
-                                goto RETRY;
                             }
                             else
                             {
                                 resolver_handle.rt_info.invalid_receives++;
                                 printf( "Reception Fault %s\n", strerror(errno) );
-                                goto RETRY;
                             }
                         }
                         else
