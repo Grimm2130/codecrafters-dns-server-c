@@ -1363,4 +1363,8 @@ static void dns_handle_compressed_query(dns_question_t *question, cir_buffer_t* 
         perror("error!!");
         exit(-1);
     }
+    else
+    {
+        printf("Compressed header : %s\n", dns_question_str(question) );
+    }
 }
