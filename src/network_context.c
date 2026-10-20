@@ -15,7 +15,7 @@ void network_context_init(network_context_t *context, const char *ip, uint16_t p
 {
     uint32_t ip_n = INADDR_ANY;
 
-    if (ip)
+    if(ip)
     {
         ip_n = ip_str_to_n(ip);
     }

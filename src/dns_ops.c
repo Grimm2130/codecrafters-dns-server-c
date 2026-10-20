@@ -519,11 +519,13 @@ uint32_t dns_answer_deserialize(dns_answer_t *answer, const char *in_buf, const 
     uint32_t offset = 0;
     uint32_t label_end_idx = size - (2 * sizeof(uint16_t));
     dns_label_t *curr_label;
-
+    
+    
     net_serializer_init(&serializer);
-
+    
     if( in_buf )
     {
+        dns_answer_init(answer);
         net_serializer_append_raw( &serializer, in_buf, size );
 
         do
