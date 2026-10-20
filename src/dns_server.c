@@ -522,11 +522,15 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                             {
                                 resolver_handle.rt_info.read_timeouts++;
                                 printf( "Reception Fault %s\n", strerror(errno) );
+                                q_idx--;
+                                continue;
                             }
                             else
                             {
                                 resolver_handle.rt_info.invalid_receives++;
                                 printf( "Reception Fault %s\n", strerror(errno) );
+                                q_idx--;
+                                continue;
                             }
                         }
                         else
