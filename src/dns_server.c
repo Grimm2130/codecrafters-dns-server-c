@@ -480,6 +480,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
 
                                 #if defined(LOCAL_BUILD)
                                 log_trace( &resolver_logger, "Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                                #else
+                                printf("Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
                                 #endif // LOCAL_USER
                                 
                                 net_serializer_append_raw( &inner_serializer, resolver_data.data, resolver_data.len );
@@ -527,6 +529,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         {
                             #if defined(LOCAL_BUILD)
                             log_fatal( &resolver_logger, "Transmission Fault %s", strerror(errno) );
+                            #else
+                            printf("Transmission Fault %s", strerror(errno) );
                             #endif // LOCAL_USER
                             
                             resolver_handle.rt_info.invalid_transmits++;
