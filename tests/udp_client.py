@@ -168,4 +168,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             print("Timeout occured")
 
         # time.sleep(0.001)
+        time.sleep(1)
         iters += 1

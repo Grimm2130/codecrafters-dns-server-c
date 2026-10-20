@@ -388,6 +388,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
             {
                 #if defined(LOCAL_BUILD)
                 log_debug( &resolver_logger, "[Resolver Request] Header: {%s}", dns_hdr_str( &header ) );
+                #else
+                printf("[Resolver Request] Header: {%s}", dns_hdr_str( &header ) );
                 #endif // LOCAL_USER
 
                 // Copy the inner header to be used for intermediate transactions
@@ -431,6 +433,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         {
                             cir_buffer_t temp_questions;
                             cir_buffer_copy( &temp_questions, &questions, sizeof(dns_question_t) );
+                            dns_handle_compressed_query(&question, &temp_questions, pointer );
                             cir_buffer_deinit(&temp_questions);
                         }
 
@@ -446,6 +449,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
 
                         #if defined(LOCAL_BUILD)
                         log_debug( &resolver_logger, "[Resolver Request] Question: {%s}", dns_question_str( &question ) );
+                        #else
+                        printf( "[Resolver Request] Question: {%s}", dns_question_str( &question ) );
                         #endif // LOCAL_USER
 
                         // Copy the header and question into the transmission buffer
@@ -455,7 +460,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         bytes = resolver_data.len;
 
                         #if defined(LOCAL_BUILD)
-                        log_trace( &resolver_logger, "Transmitting data: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                        log_trace( &resolver_logger, "Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
                         #endif // LOCAL_USER
                             
                         if( bytes == udp_server_handle_send( &resolver_handle, &resolver_data ) )
@@ -471,7 +476,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                                 net_serializer_init( &inner_serializer );
 
                                 #if defined(LOCAL_BUILD)
-                                log_trace( &resolver_logger, "Receiving data: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                                log_trace( &resolver_logger, "Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
                                 #endif // LOCAL_USER
                                 
                                 net_serializer_append_raw( &inner_serializer, resolver_data.data, resolver_data.len );
@@ -705,14 +710,16 @@ void dns_service_start(const char *forwarding_addr)
         .prio = 10,
         .stack_size = 1e6,
         .arg = (void *)(&g_server_handle),
-        .fn = dns_receiver_routine};
+        .fn = dns_receiver_routine
+    };
 
     task_params_t transmitter_task_param = {
         .can_join = true,
         .prio = 10,
         .stack_size = 1e6,
         .arg = (void *)(&g_server_handle),
-        .fn = dns_transmitter_routine};
+        .fn = dns_transmitter_routine
+    };
 
     task_params_t resolver_task_params = {
         .can_join = true,
