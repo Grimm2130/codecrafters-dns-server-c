@@ -431,9 +431,12 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         // Check if a compressed query was sent
                         if( pointer )
                         {
+                            printf("Compressed query encountered!\n");
                             cir_buffer_t temp_questions;
                             cir_buffer_copy( &temp_questions, &questions, sizeof(dns_question_t) );
+
                             dns_handle_compressed_query(&question, &temp_questions, pointer );
+                            
                             cir_buffer_deinit(&temp_questions);
                         }
 
