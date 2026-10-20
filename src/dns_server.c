@@ -464,8 +464,10 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
 
                         #if defined(LOCAL_BUILD)
                         log_trace( &resolver_logger, "Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                        #else
+                        printf("Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
                         #endif // LOCAL_USER
-                            
+                        
                         if( bytes == udp_server_handle_send( &resolver_handle, &resolver_data ) )
                         {
                             bytes = udp_server_handle_receive( &resolver_handle, &resolver_data );
@@ -519,10 +521,12 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                             else if( bytes == 0 )
                             {
                                 resolver_handle.rt_info.read_timeouts++;
+                                printf( "Reception Fault %s\n", strerror(errno) );
                             }
                             else
                             {
                                 resolver_handle.rt_info.invalid_receives++;
+                                printf( "Reception Fault %s\n", strerror(errno) );
                             }
                         }
                         else
@@ -530,7 +534,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                             #if defined(LOCAL_BUILD)
                             log_fatal( &resolver_logger, "Transmission Fault %s", strerror(errno) );
                             #else
-                            printf("Transmission Fault %s", strerror(errno) );
+                            printf( "Transmission Fault %s\n", strerror(errno) );
                             #endif // LOCAL_USER
                             
                             resolver_handle.rt_info.invalid_transmits++;
