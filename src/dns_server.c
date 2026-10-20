@@ -470,8 +470,8 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         
                         if( bytes == udp_server_handle_send( &resolver_handle, &resolver_data ) )
                         {
+RETRY:
                             bytes = udp_server_handle_receive( &resolver_handle, &resolver_data );
-
                             if( bytes > 0 )
                             {
                                 net_serializer_t inner_serializer;
@@ -522,15 +522,13 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                             {
                                 resolver_handle.rt_info.read_timeouts++;
                                 printf( "Reception Fault %s\n", strerror(errno) );
-                                q_idx--;
-                                continue;
+                                goto RETRY;
                             }
                             else
                             {
                                 resolver_handle.rt_info.invalid_receives++;
                                 printf( "Reception Fault %s\n", strerror(errno) );
-                                q_idx--;
-                                continue;
+                                goto RETRY;
                             }
                         }
                         else
