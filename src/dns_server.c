@@ -535,6 +535,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
 
                 // Set header as response
                 header.qr = 1;
+                header.an_count = answers.size;
 
                 printf("[Remote Resolver] Header : %s", dns_hdr_str(&header));
 
