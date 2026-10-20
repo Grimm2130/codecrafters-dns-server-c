@@ -431,7 +431,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         // Check if a compressed query was sent
                         if( pointer )
                         {
-                            printf("Compressed query encountered!\n");
+                            printf("Compressed query encountered! for index %u\n", pointer);
                             cir_buffer_t temp_questions;
                             cir_buffer_copy( &temp_questions, &questions, sizeof(dns_question_t) );
 
@@ -453,7 +453,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         #if defined(LOCAL_BUILD)
                         log_debug( &resolver_logger, "[Resolver Request] Question: {%s}", dns_question_str( &question ) );
                         #else
-                        printf( "[Resolver Request] Question: {%s}\n", dns_question_str( &question ) );
+                        printf( "[Resolver Request] Question(%u): {%s}\n", q_idx, dns_question_str( &question ) );
                         #endif // LOCAL_USER
 
                         // Copy the header and question into the transmission buffer
