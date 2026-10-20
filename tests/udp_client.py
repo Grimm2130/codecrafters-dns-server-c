@@ -104,7 +104,8 @@ iters  = 0
 
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
 
-    sock.settimeout(0.001)
+    # sock.settimeout(0.001)
+    sock.settimeout(1)
 
     messages = [
         DNSHeader(
@@ -129,28 +130,28 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             qclass=1
         ).to_bytes(),
         
-        # DNSHeader(
-        #     id = 1236,
-        #     qr = 0,
-        #     qd_count=3
-        # ).to_bytes() +
-        # DNSQuestion(
-        #     content="codecrafters.io",
-        #     qtype=1,
-        #     qclass=1
-        # ).to_bytes() +
-        # DNSQuestion(
-        #     content="facebook.io",
-        #     qtype=1,
-        #     qclass=1
-        # ).to_bytes() 
-        # +
-        # DNSQuestion(
-        #     content="33",
-        #     qtype=1,
-        #     qclass=1,
-        #     is_compressed=True
-        # ).to_bytes(),
+        DNSHeader(
+            id = 1236,
+            qr = 0,
+            qd_count=3
+        ).to_bytes() +
+        DNSQuestion(
+            content="codecrafters.io",
+            qtype=1,
+            qclass=1
+        ).to_bytes() +
+        DNSQuestion(
+            content="facebook.io",
+            qtype=1,
+            qclass=1
+        ).to_bytes() 
+        +
+        DNSQuestion(
+            content="33",
+            qtype=1,
+            qclass=1,
+            is_compressed=True
+        ).to_bytes(),
     ]
 
     while True:

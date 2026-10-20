@@ -33,7 +33,7 @@ net_serializer_t g_rxSerializer;
 logger_t g_main_thread_logger;
 logger_params_t g_main_thread_logger_params =
     {
-        .level = LOG_LEVEL_ERROR,//LOG_LEVEL_TRACE,
+        .level = LOG_LEVEL_TRACE,
 #ifdef RESOLVER
         .log_fname = "main-resolver",
 #else
@@ -91,6 +91,7 @@ static uint32_t dns_reply_serialize(char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_hdr(dns_hdr_t *hdr, char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_question(dns_question_t *question, char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_answer(dns_answer_t *answer, char *rply_buf, const uint32_t size);
+static void dns_handle_compressed_query(dns_question_t *question, cir_buffer_t* prev_queries, const uint16_t offset );
 
 static void init_remote_resolver_handle(const char *resolver_addr);
 
@@ -145,7 +146,7 @@ static void dns_receiver_routine(void *arg)
     logger_t receiver_logger;
     logger_params_t receiver_logger_params =
         {
-            .level = LOG_LEVEL_ERROR, //LOG_LEVEL_TRACE,
+            .level = LOG_LEVEL_TRACE,
 #ifdef RESOLVER
             .log_fname = "resolver-receiver",
 #else
@@ -224,7 +225,7 @@ static void dns_transmitter_routine(void *arg)
     logger_t transmitter_logger;
     logger_params_t transmitter_logger_params =
         {
-            .level = LOG_LEVEL_ERROR, //LOG_LEVEL_TRACE,
+            .level = LOG_LEVEL_TRACE,
 #ifdef RESOLVER
             .log_fname = "resolver-transmitter",
 #else
@@ -316,7 +317,7 @@ static void dns_resolver_routine(void *arg)
 
     logger_params_t resolver_logger_params =
     {
-        .level = LOG_LEVEL_ERROR, //LOG_LEVEL_TRACE,
+        .level = LOG_LEVEL_TRACE,
         .log_fname_ext = "log",
 #ifdef RESOLVER
         .log_fname = "resolver-resolver",
@@ -428,8 +429,9 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         // Check if a compressed query was sent
                         if( pointer )
                         {
-                            printf("Compressed query @ position %u | %u\n", pointer, header.qd_count);
-                            exit(2);
+                            cir_buffer_t temp_questions;
+                            cir_buffer_copy( &temp_questions, &questions, sizeof(dns_question_t) );
+                            cir_buffer_deinit(&temp_questions);
                         }
 
                         // remove the question from the serializer
@@ -525,19 +527,21 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 #endif // LOCAL_USER
                 
                 net_serializer_clear(&serializer);
-                
-                printf("Remote response:\n");
 
                 // Serialize head
                 #if defined(LOCAL_BUILD)
                 log_debug( &resolver_logger, "Serializing response to client....Header");
                 #endif // LOCAL_USER
-
+                
                 // Set header as response
                 header.qr = 1;
                 header.an_count = answers.size;
-
+                
+                #if defined(LOCAL_BUILD)
+                log_debug( &resolver_logger, "[Remote Resolver] Header : %s", dns_hdr_str(&header));
+                #else
                 printf("[Remote Resolver] Header : %s", dns_hdr_str(&header));
+                #endif // LOCAL_USER
 
                 bytes = dns_hdr_serialize( &header, answer_buf, TEMP_BUFF_SIZE );
                 net_serializer_append_raw( &serializer, answer_buf, bytes );
@@ -551,7 +555,13 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 while( cir_buffer_is_empty(&questions) == false )
                 {
                     cir_buffer_read(&questions, (char*)&question, sizeof(dns_question_t));
+                    
+                    #if defined(LOCAL_BUILD)
+                    log_debug( &resolver_logger, "[Remote Resolver] Question [%u] : %s", questions.front, dns_question_str(&question));
+                    #else
                     printf("[Remote Resolver] Question [%u] : %s", questions.front, dns_question_str(&question));
+                    #endif
+                    
                     bytes = dns_question_serialize( &question, answer_buf, TEMP_BUFF_SIZE );
                     net_serializer_append_raw( &serializer, answer_buf, bytes );
                 }
@@ -563,7 +573,13 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 
                 while( cir_buffer_is_empty(&answers) == false )
                 {
+                    
+                    #if defined(LOCAL_BUILD)
+                    log_debug( &resolver_logger, "[Remote Resolver] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
+                    #else
                     printf("[Remote Resolver] Answer [%u] : %s", answers.front, dns_answer_str(&answer));
+                    #endif
+
                     cir_buffer_read(&answers, (char*)&answer, sizeof(dns_answer_t));
                     bytes = dns_answer_serialize( &answer, answer_buf, TEMP_BUFF_SIZE );
                     net_serializer_append_raw( &serializer, answer_buf, bytes );
@@ -1020,71 +1036,10 @@ static void dns_process_msg__dns_hdr_questions(dns_hdr_t *hdr)
             // question has compressed label
             if (c_pointer)
             {
-                bool done = false;
-                dns_label_t *compressed_label;
-                dns_label_t *referenced_label;
-                dns_question_t temp_question;
                 cir_buffer_t temp_questions;
-
-                // instantiate offset to account for header
-                uint32_t offset = DSN_HDR_SIZE;
-
-                // Copy the processed questions
                 cir_buffer_copy(&temp_questions, &g_questions, sizeof(dns_question_t));
 
-                while ((done == false) && cir_buffer_is_empty(&temp_questions) == false)
-                {
-                    uint16_t l_idx = 0;
-
-                    #if defined(LOCAL_BUILD)
-                    log_debug(&g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u", offset, c_pointer);
-                    #endif
-
-                    cir_buffer_read(&temp_questions, (char *)&temp_question, sizeof(dns_question_t));
-
-                    while ((l_idx < temp_question.label_cnt) && offset < c_pointer)
-                    {
-                        #if defined(LOCAL_BUILD)
-                        log_debug(&g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u", offset, c_pointer);
-                        #endif
-                        // increment the offset
-                        offset += sizeof(temp_question.qname[l_idx].len); // label len
-                        offset += temp_question.qname[l_idx].len;         // label content
-                        l_idx++;
-                    }
-
-                    // index found in question
-                    if (offset == c_pointer)
-                    {
-                        while (l_idx < temp_question.label_cnt)
-                        {
-                            referenced_label = &temp_question.qname[l_idx];
-
-                            // Copy the referenced label into the compressed label
-                            compressed_label = &question.qname[question.label_cnt++];
-                            memcpy(compressed_label, referenced_label, sizeof(dns_label_t));
-
-                            l_idx++;
-                        }
-
-                        done = true;
-                        break;
-                    }
-                    // offset not in question
-                    else
-                    {
-                        offset += sizeof(uint8_t);  // null
-                        offset += sizeof(uint16_t); // type
-                        offset += sizeof(uint16_t); // class
-                    }
-                }
-
-                if (done == false)
-                {
-                    // ! ERROR
-                    perror("error!!");
-                    exit(-1);
-                }
+                dns_handle_compressed_query( &question, &temp_questions, c_pointer );
 
                 cir_buffer_deinit(&temp_questions);
             }
@@ -1328,4 +1283,69 @@ log_debug(&g_main_thread_logger, "Serialized Answer: %s", dns_answer_str(answer)
 #endif
 
     return dns_answer_serialize(answer, rply_buf, size);
+}
+
+static void dns_handle_compressed_query(dns_question_t *question, cir_buffer_t* prev_queries, const uint16_t pointer )
+{
+    bool done = false;
+    dns_label_t *compressed_label;
+    dns_label_t *referenced_label;
+    dns_question_t temp_question;
+
+    // instantiate offset to account for header
+    uint32_t offset = DSN_HDR_SIZE;
+
+    while ((done == false) && cir_buffer_is_empty(prev_queries) == false)
+    {
+        uint16_t l_idx = 0;
+
+        #if defined(LOCAL_BUILD)
+        log_debug(&g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u", offset, pointer);
+        #endif
+
+        cir_buffer_read(prev_queries, (char *)&temp_question, sizeof(dns_question_t));
+
+        while ((l_idx < temp_question.label_cnt) && offset < pointer)
+        {
+            #if defined(LOCAL_BUILD)
+            log_debug(&g_main_thread_logger, "[Pointer resolution] Curr off - %u, Expected - %u", offset, pointer);
+            #endif
+            // increment the offset
+            offset += sizeof(temp_question.qname[l_idx].len); // label len
+            offset += temp_question.qname[l_idx].len;         // label content
+            l_idx++;
+        }
+
+        // index found in question
+        if (offset == pointer)
+        {
+            while (l_idx < temp_question.label_cnt)
+            {
+                referenced_label = &temp_question.qname[l_idx];
+
+                // Copy the referenced label into the compressed label
+                compressed_label = &(question->qname[question->label_cnt++]);
+                memcpy(compressed_label, referenced_label, sizeof(dns_label_t));
+
+                l_idx++;
+            }
+
+            done = true;
+            break;
+        }
+        // offset not in question
+        else
+        {
+            offset += sizeof(uint8_t);  // null
+            offset += sizeof(uint16_t); // type
+            offset += sizeof(uint16_t); // class
+        }
+    }
+
+    if (done == false)
+    {
+        // ! ERROR
+        perror("error!!");
+        exit(-1);
+    }
 }
