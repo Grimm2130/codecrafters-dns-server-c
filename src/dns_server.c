@@ -428,7 +428,7 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                         // Check if a compressed query was sent
                         if( pointer )
                         {
-                            perror("Compressed query!\n");
+                            printf("Compressed query @ position %u | %u\n", pointer, header.qd_count);
                             exit(2);
                         }
 
