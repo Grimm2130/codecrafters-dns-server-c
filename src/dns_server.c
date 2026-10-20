@@ -92,6 +92,7 @@ static uint32_t dns_reply_serialize_hdr(dns_hdr_t *hdr, char *rply_buf, const ui
 static uint32_t dns_reply_serialize_question(dns_question_t *question, char *rply_buf, const uint32_t size);
 static uint32_t dns_reply_serialize_answer(dns_answer_t *answer, char *rply_buf, const uint32_t size);
 static void dns_handle_compressed_query(dns_question_t *question, cir_buffer_t* prev_queries, const uint16_t offset );
+static bool dns_remote_resolver_header_check( const dns_hdr_t* hdr );
 
 static void init_remote_resolver_handle(const char *resolver_addr);
 
@@ -406,139 +407,146 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                     sleep(2);
                     exit(1);
                 }
-                
-                // Process each question
-                for( uint8_t q_idx = 0; q_idx < header.qd_count; q_idx++ )
+
+                if( dns_remote_resolver_header_check(&header) )
                 {
-                    inner_header.qr = 0;
-                    #if defined(LOCAL_BUILD)
-                    log_trace( &resolver_logger, "Processing Question (%u)", q_idx );
-                    #endif // LOCAL_USER
-
-                    // reset the pointer index
-                    pointer = 0;
-
-                    // extract the question
-                    bytes = dns_question_deserialize(
-                        &question,
-                        net_serializer_get_buf(&serializer),
-                        net_serializer_get_size(&serializer),
-                        &pointer
-                    );
-
-                    if( bytes )
+                    // Process each question
+                    for( uint8_t q_idx = 0; q_idx < header.qd_count; q_idx++ )
                     {
-                        // Check if a compressed query was sent
-                        if( pointer )
-                        {
-                            printf("Compressed query encountered! for index %u\n", pointer);
-                            cir_buffer_t temp_questions;
-                            cir_buffer_copy( &temp_questions, &questions, sizeof(dns_question_t) );
-
-                            dns_handle_compressed_query(&question, &temp_questions, pointer );
-                            
-                            cir_buffer_deinit(&temp_questions);
-                        }
-
-                        // remove the question from the serializer
-                        if( net_serializer_remove_raw( &serializer, 0, NULL, bytes ) )
-                        {
-                            #if defined(LOCAL_BUILD)
-                            log_fatal( &resolver_logger, "Serializer fault");
-                            #endif // LOCAL_USER
-
-                            exit(3);
-                        }
-
+                        inner_header.qr = 0;
                         #if defined(LOCAL_BUILD)
-                        log_debug( &resolver_logger, "[Resolver Request] Question: {%s}", dns_question_str( &question ) );
-                        #else
-                        printf( "[Resolver Request] Question(%u): {%s}\n", q_idx, dns_question_str( &question ) );
+                        log_trace( &resolver_logger, "Processing Question (%u)", q_idx );
                         #endif // LOCAL_USER
-
-                        // Copy the header and question into the transmission buffer
-                        resolver_data.len = 0;
-                        resolver_data.len = dns_hdr_serialize( &inner_header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
-                        resolver_data.len += dns_question_serialize( &question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
-                        bytes = resolver_data.len;
-
-                        #if defined(LOCAL_BUILD)
-                        log_trace( &resolver_logger, "Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
-                        #else
-                        printf("Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
-                        #endif // LOCAL_USER
-                        
-                        if( bytes == udp_server_handle_send( &resolver_handle, &resolver_data ) )
+    
+                        // reset the pointer index
+                        pointer = 0;
+    
+                        // extract the question
+                        bytes = dns_question_deserialize(
+                            &question,
+                            net_serializer_get_buf(&serializer),
+                            net_serializer_get_size(&serializer),
+                            &pointer
+                        );
+    
+                        if( bytes )
                         {
-                            bytes = udp_server_handle_receive( &resolver_handle, &resolver_data );
-                            if( bytes > 0 )
+                            // Check if a compressed query was sent
+                            if( pointer )
                             {
-                                net_serializer_t inner_serializer;
+                                printf("Compressed query encountered! for index %u\n", pointer);
+                                cir_buffer_t temp_questions;
+                                cir_buffer_copy( &temp_questions, &questions, sizeof(dns_question_t) );
+    
+                                dns_handle_compressed_query(&question, &temp_questions, pointer );
                                 
-                                resolver_handle.rt_info.read_bytes += bytes;
-                                
-                                net_serializer_init( &inner_serializer );
-
-                                #if defined(LOCAL_BUILD)
-                                log_trace( &resolver_logger, "Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
-                                #else
-                                printf("Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
-                                #endif // LOCAL_USER
-                                
-                                net_serializer_append_raw( &inner_serializer, resolver_data.data, resolver_data.len );
-                                
-                                pointer = 0;
-                                
-                                
-                                // extract the header
-                                bytes = dns_hdr_deserialize(&inner_header, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer) );
-                                net_serializer_remove_raw(&inner_serializer, 0, NULL, bytes );
-                                
-                                // extract the query
-                                bytes = dns_question_deserialize(&question, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer), &pointer );
-                                net_serializer_remove_raw(&inner_serializer, 0, NULL, bytes );
-                                
-                                // extract the answer
-                                bytes = dns_answer_deserialize(&answer, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer));
-                                net_serializer_remove_raw(&inner_serializer, 0, NULL, bytes );
-                            
-                                #if defined(LOCAL_BUILD)
-                                log_debug( &resolver_logger, "[Resolver Response] Header: {%s}", dns_hdr_str( &inner_header ) );
-                                log_debug( &resolver_logger, "[Resolver Response] Question: {%s}", dns_question_str( &question ) );
-                                log_debug( &resolver_logger, "[Resolver Response] Answer: {%s}", dns_answer_str( &answer ) );
-                                #else
-                                printf("[Resolver Response (inter)] Header: {%s}\n", dns_hdr_str( &inner_header ) );
-                                printf("[Resolver Response (inter)] Question: {%s}\n", dns_question_str( &question ) );
-                                printf("[Resolver Response (inter)] Answer: {%s}\n", dns_answer_str( &answer ) );
-                                #endif // LOCAL_USER
-
-                                cir_buffer_write(&questions, (const char*)&question, sizeof(dns_question_t) );
-                                cir_buffer_write(&answers, (const char*)&answer, sizeof(dns_answer_t) );
-
-                                net_serializer_deinit( &inner_serializer );
+                                cir_buffer_deinit(&temp_questions);
                             }
-                            else if( bytes == 0 )
+    
+                            // remove the question from the serializer
+                            if( net_serializer_remove_raw( &serializer, 0, NULL, bytes ) )
                             {
-                                resolver_handle.rt_info.read_timeouts++;
-                                printf( "Reception Fault %s\n", strerror(errno) );
+                                #if defined(LOCAL_BUILD)
+                                log_fatal( &resolver_logger, "Serializer fault");
+                                #endif // LOCAL_USER
+    
+                                exit(3);
+                            }
+    
+                            #if defined(LOCAL_BUILD)
+                            log_debug( &resolver_logger, "[Resolver Request] Question: {%s}", dns_question_str( &question ) );
+                            #else
+                            printf( "[Resolver Request] Question(%u): {%s}\n", q_idx, dns_question_str( &question ) );
+                            #endif // LOCAL_USER
+    
+                            // Copy the header and question into the transmission buffer
+                            resolver_data.len = 0;
+                            resolver_data.len = dns_hdr_serialize( &inner_header, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
+                            resolver_data.len += dns_question_serialize( &question, resolver_data.data + resolver_data.len, CLIENT_DATA_SIZE - resolver_data.len );
+                            bytes = resolver_data.len;
+    
+                            #if defined(LOCAL_BUILD)
+                            log_trace( &resolver_logger, "Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                            #else
+                            printf("Transmitting data to resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                            #endif // LOCAL_USER
+                            
+                            if( bytes == udp_server_handle_send( &resolver_handle, &resolver_data ) )
+                            {
+                                bytes = udp_server_handle_receive( &resolver_handle, &resolver_data );
+                                if( bytes > 0 )
+                                {
+                                    net_serializer_t inner_serializer;
+                                    
+                                    resolver_handle.rt_info.read_bytes += bytes;
+                                    
+                                    net_serializer_init( &inner_serializer );
+    
+                                    #if defined(LOCAL_BUILD)
+                                    log_trace( &resolver_logger, "Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                                    #else
+                                    printf("Receiving data from resolver: (%u) {%s}", bytes, client_msg_str(&resolver_data) );
+                                    #endif // LOCAL_USER
+                                    
+                                    net_serializer_append_raw( &inner_serializer, resolver_data.data, resolver_data.len );
+                                    
+                                    pointer = 0;
+                                    
+                                    
+                                    // extract the header
+                                    bytes = dns_hdr_deserialize(&inner_header, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer) );
+                                    net_serializer_remove_raw(&inner_serializer, 0, NULL, bytes );
+                                    
+                                    // extract the query
+                                    bytes = dns_question_deserialize(&question, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer), &pointer );
+                                    net_serializer_remove_raw(&inner_serializer, 0, NULL, bytes );
+                                    
+                                    // extract the answer
+                                    bytes = dns_answer_deserialize(&answer, net_serializer_get_buf(&inner_serializer), net_serializer_get_size(&inner_serializer));
+                                    net_serializer_remove_raw(&inner_serializer, 0, NULL, bytes );
+                                
+                                    #if defined(LOCAL_BUILD)
+                                    log_debug( &resolver_logger, "[Resolver Response] Header: {%s}", dns_hdr_str( &inner_header ) );
+                                    log_debug( &resolver_logger, "[Resolver Response] Question: {%s}", dns_question_str( &question ) );
+                                    log_debug( &resolver_logger, "[Resolver Response] Answer: {%s}", dns_answer_str( &answer ) );
+                                    #else
+                                    printf("[Resolver Response (inter)] Header: {%s}\n", dns_hdr_str( &inner_header ) );
+                                    printf("[Resolver Response (inter)] Question: {%s}\n", dns_question_str( &question ) );
+                                    printf("[Resolver Response (inter)] Answer: {%s}\n", dns_answer_str( &answer ) );
+                                    #endif // LOCAL_USER
+    
+                                    cir_buffer_write(&questions, (const char*)&question, sizeof(dns_question_t) );
+                                    cir_buffer_write(&answers, (const char*)&answer, sizeof(dns_answer_t) );
+    
+                                    net_serializer_deinit( &inner_serializer );
+                                }
+                                else if( bytes == 0 )
+                                {
+                                    resolver_handle.rt_info.read_timeouts++;
+                                    printf( "Reception Fault %s\n", strerror(errno) );
+                                }
+                                else
+                                {
+                                    resolver_handle.rt_info.invalid_receives++;
+                                    printf( "Reception Fault %s\n", strerror(errno) );
+                                }
                             }
                             else
                             {
-                                resolver_handle.rt_info.invalid_receives++;
-                                printf( "Reception Fault %s\n", strerror(errno) );
+                                #if defined(LOCAL_BUILD)
+                                log_fatal( &resolver_logger, "Transmission Fault %s", strerror(errno) );
+                                #else
+                                printf( "Transmission Fault %s\n", strerror(errno) );
+                                #endif // LOCAL_USER
+                                
+                                resolver_handle.rt_info.invalid_transmits++;
                             }
                         }
-                        else
-                        {
-                            #if defined(LOCAL_BUILD)
-                            log_fatal( &resolver_logger, "Transmission Fault %s", strerror(errno) );
-                            #else
-                            printf( "Transmission Fault %s\n", strerror(errno) );
-                            #endif // LOCAL_USER
-                            
-                            resolver_handle.rt_info.invalid_transmits++;
-                        }
                     }
+                }
+                else
+                {
+                    header.rcode = DNS_HEADER_RCODE__NOT_IMPLEMENTED;
                 }
 
                 #if defined(LOCAL_BUILD)
@@ -1374,4 +1382,9 @@ static void dns_handle_compressed_query(dns_question_t *question, cir_buffer_t* 
     {
         printf("Compressed header : %s\n", dns_question_str(question) );
     }
+}
+
+static bool dns_remote_resolver_header_check( const dns_hdr_t* hdr )
+{
+    return (hdr->opcode == DNS_HEADER_OPCODE__STANDARD_QUERY);
 }
