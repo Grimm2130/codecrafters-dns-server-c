@@ -2,6 +2,8 @@
 
 This project implements a basic DNS server application. Its functionality is limited and was intended for learning purposes.
 
+---
+
 [![progress-banner](https://backend.codecrafters.io/progress/dns-server/823ddb39-2661-4b97-9402-5272d67596d5)](https://app.codecrafters.io/users/Grimm2130?r=2qF)
 
 This is a starting point for C solutions to the
