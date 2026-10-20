@@ -530,6 +530,10 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                 #if defined(LOCAL_BUILD)
                 log_debug( &resolver_logger, "Serializing response to client....Header");
                 #endif // LOCAL_USER
+
+                // Set header as response
+                header.qr = 1;
+
                 bytes = dns_hdr_serialize( &header, answer_buf, TEMP_BUFF_SIZE );
                 net_serializer_append_raw( &serializer, answer_buf, bytes );
                 
