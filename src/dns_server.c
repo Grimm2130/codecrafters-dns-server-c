@@ -501,9 +501,9 @@ logger_get_instance(&resolver_logger, &resolver_logger_params);
                                 log_debug( &resolver_logger, "[Resolver Response] Question: {%s}", dns_question_str( &question ) );
                                 log_debug( &resolver_logger, "[Resolver Response] Answer: {%s}", dns_answer_str( &answer ) );
                                 #else
-                                printf("[Resolver Response] Header: {%s}\n", dns_hdr_str( &inner_header ) );
-                                printf("[Resolver Response] Question: {%s}\n", dns_question_str( &question ) );
-                                printf("[Resolver Response] Answer: {%s}\n", dns_answer_str( &answer ) );
+                                printf("[Resolver Response (inter)] Header: {%s}\n", dns_hdr_str( &inner_header ) );
+                                printf("[Resolver Response (inter)] Question: {%s}\n", dns_question_str( &question ) );
+                                printf("[Resolver Response (inter)] Answer: {%s}\n", dns_answer_str( &answer ) );
                                 #endif // LOCAL_USER
 
                                 cir_buffer_write(&questions, (const char*)&question, sizeof(dns_question_t) );
